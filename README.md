@@ -1,6 +1,13 @@
 # ScreenTools
 
-> **Status: incomplete and paused.** The original author does not currently have time to finish this project. Contributors and maintainers are welcome.
+> [!IMPORTANT]
+> ## 项目未完成，寻找接手者
+>
+> 由于个人时间有限，我目前没有时间继续开发这个项目。代码仍未完成，现将它公开开源，希望有兴趣的开发者能够继续完成它。
+>
+> 这个项目想做的是一个集 **截图、剪切板、录屏和回放录制** 于一体的 Windows 工具。如果你愿意接手、共同维护或完成其中一部分，请直接查看并认领 [Issues](https://github.com/rancy777/ScreenTools/issues)。
+
+> **Incomplete project — contributors and a new maintainer wanted.** I currently do not have enough time to finish it, so the unfinished code is being released publicly in the hope that someone interested can continue the work.
 
 ScreenTools is an experimental all-in-one Windows desktop utility for screenshots, clipboard history, screen recording, and instant replay recording. The goal is to keep these common capture workflows in one lightweight, native-feeling tool.
 
@@ -70,4 +77,3 @@ If you want to take ownership of a work item, open or comment on an issue before
 ## License
 
 MIT. See [LICENSE](LICENSE).
-
