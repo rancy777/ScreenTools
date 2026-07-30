@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 
 namespace ScreenTools;
 
-public sealed class MicrophoneCaptureService : IDisposable
+public sealed class MicrophoneCaptureService : IAudioCaptureService
 {
     private const int WaveMapper = unchecked((int)0xFFFFFFFF);
     private const int CallbackFunction = 0x00030000;
@@ -20,8 +20,11 @@ public sealed class MicrophoneCaptureService : IDisposable
 
     public MicrophoneCaptureService()
     {
-        _waveInProc = OnWaveInData;
     }
+
+    public bool IsSupported => true;
+
+    public string AvailabilityMessage => "麦克风将使用 Windows 音频采集 API 录制。";
 
     public void Dispose()
     {

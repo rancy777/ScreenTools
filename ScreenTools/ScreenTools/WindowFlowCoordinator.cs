@@ -16,7 +16,7 @@ public sealed class WindowFlowCoordinator
     private readonly FrameSequenceEncoder _frameSequenceEncoder;
     private readonly TempWorkspaceService _tempWorkspaceService;
     private readonly MicrophoneCaptureService _microphoneCaptureService;
-    private readonly SystemAudioCaptureService _systemAudioCaptureService;
+    private readonly WasapiLoopbackCaptureService _systemAudioCaptureService;
     private readonly ReplayBufferService _replayBufferService;
     private readonly OutputHistoryService _outputHistoryService;
     private readonly ClipboardManagerService _clipboardManagerService;
@@ -42,7 +42,7 @@ public sealed class WindowFlowCoordinator
         _screenCaptureService = new ScreenCaptureService();
         _frameSequenceEncoder = new FrameSequenceEncoder();
         _microphoneCaptureService = new MicrophoneCaptureService();
-        _systemAudioCaptureService = new SystemAudioCaptureService(_frameSequenceEncoder.FfmpegPath);
+        _systemAudioCaptureService = new WasapiLoopbackCaptureService();
         _systemAudioCaptureService.RefreshAvailability();
         _outputHistoryService = new OutputHistoryService();
         _clipboardManagerService = new ClipboardManagerService();

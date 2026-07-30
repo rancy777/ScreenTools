@@ -18,7 +18,7 @@ public partial class MainWindow : Window
     private OutputHistoryService? _outputHistoryService;
     private ClipboardManagerService? _clipboardManagerService;
     private AppStatusService? _statusService;
-    private SystemAudioCaptureService? _systemAudioCaptureService;
+    private WasapiLoopbackCaptureService? _systemAudioCaptureService;
     private bool _isSyncingFromSession;
     private ComboBox? _screenshotFormatComboBox;
     private ComboBox? _screenshotModeComboBox;
@@ -73,7 +73,7 @@ public partial class MainWindow : Window
         RenderStatus();
     }
 
-    public void BindSystemAudioCapture(SystemAudioCaptureService systemAudioCaptureService)
+    public void BindSystemAudioCapture(WasapiLoopbackCaptureService systemAudioCaptureService)
     {
         _systemAudioCaptureService = systemAudioCaptureService;
         RenderEnvironmentSummary();

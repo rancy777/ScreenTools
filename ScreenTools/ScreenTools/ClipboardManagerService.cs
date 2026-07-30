@@ -10,7 +10,7 @@ using System.Windows.Media.Imaging;
 
 namespace ScreenTools;
 
-public sealed class ClipboardManagerService
+public sealed class ClipboardManagerService : IClipboardManagerService
 {
     private const int MaxEntries = 8;
     private readonly string _historyPath;
@@ -128,9 +128,16 @@ public sealed class ClipboardManagerService
 
     private void Save()
     {
-        File.WriteAllText(
-            _historyPath,
-            JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true }));
+        try
+        {
+            File.WriteAllText(
+                _historyPath,
+                JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch
+        {
+            // Clipboard history persistence is best-effort.
+        }
     }
 
     private static string GetFailureDetail(Exception? error)

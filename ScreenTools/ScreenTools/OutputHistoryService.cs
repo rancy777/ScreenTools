@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace ScreenTools;
 
-public sealed class OutputHistoryService
+public sealed class OutputHistoryService : IOutputHistoryService
 {
     private readonly string _historyPath;
     private readonly List<RecentOutputEntry> _entries = [];
@@ -70,8 +70,15 @@ public sealed class OutputHistoryService
 
     private void Save()
     {
-        File.WriteAllText(
-            _historyPath,
-            JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true }));
+        try
+        {
+            File.WriteAllText(
+                _historyPath,
+                JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch
+        {
+            // History persistence is best-effort.
+        }
     }
 }

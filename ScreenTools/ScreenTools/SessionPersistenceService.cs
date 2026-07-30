@@ -79,9 +79,16 @@ public sealed class SessionPersistenceService
             ReplayShortcut = session.ReplayShortcut.Clone()
         };
 
-        File.WriteAllText(
-            _settingsPath,
-            JsonSerializer.Serialize(persisted, new JsonSerializerOptions { WriteIndented = true }));
+        try
+        {
+            File.WriteAllText(
+                _settingsPath,
+                JsonSerializer.Serialize(persisted, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch
+        {
+            // Persisting settings is best-effort; do not throw from a side-effect-only save path.
+        }
     }
 
     private sealed class PersistedSessionState

@@ -18,7 +18,7 @@ public sealed class RecordingService
     private readonly ScreenCaptureService _screenCaptureService;
     private readonly FrameSequenceEncoder _frameSequenceEncoder;
     private readonly MicrophoneCaptureService _microphoneCaptureService;
-    private readonly SystemAudioCaptureService _systemAudioCaptureService;
+    private readonly WasapiLoopbackCaptureService _systemAudioCaptureService;
     private readonly List<RecordingFrameInfo> _capturedFrames = [];
     private readonly List<string> _detailMessages = [];
     private readonly SemaphoreSlim _captureLock = new(1, 1);
@@ -36,7 +36,7 @@ public sealed class RecordingService
         ScreenCaptureService screenCaptureService,
         FrameSequenceEncoder frameSequenceEncoder,
         MicrophoneCaptureService microphoneCaptureService,
-        SystemAudioCaptureService systemAudioCaptureService,
+        WasapiLoopbackCaptureService systemAudioCaptureService,
         TempWorkspaceService tempWorkspaceService)
     {
         _screenCaptureService = screenCaptureService;
@@ -84,6 +84,16 @@ public sealed class RecordingService
         if (Status != RecordingStatus.Idle)
         {
             return;
+        }
+
+        if (session is null)
+        {
+            throw new ArgumentNullException(nameof(session));
+        }
+
+        if (!TryValidateOutputDirectory(session.OutputDirectory, out var outputError))
+        {
+            throw new InvalidOperationException($"无法开始录制：{outputError}");
         }
 
         _systemAudioCaptureService.RefreshAvailability();
@@ -163,6 +173,7 @@ public sealed class RecordingService
             _microphoneCaptureService.Pause();
             _systemAudioCaptureService.Pause();
             SetStatus(RecordingStatus.Paused);
+            _detailMessages.Insert(0, $"录制已暂停于 {DateTimeOffset.Now:HH:mm:ss}。");
             RaiseRuntimeInfoChanged();
             return;
         }
@@ -174,6 +185,7 @@ public sealed class RecordingService
             _microphoneCaptureService.Resume();
             _systemAudioCaptureService.Resume();
             SetStatus(RecordingStatus.Recording);
+            _detailMessages.Insert(0, $"录制已恢复于 {DateTimeOffset.Now:HH:mm:ss}。");
             RaiseRuntimeInfoChanged();
         }
     }
@@ -264,8 +276,9 @@ public sealed class RecordingService
         }
         catch (Exception ex)
         {
-            _captureTimer.Stop();
             _detailMessages.Insert(0, $"录制帧采集失败：{ex.Message}");
+            _captureTimer.Interval = TimeSpan.FromMilliseconds(0);
+            _captureTimer.Start();
         }
         finally
         {
@@ -460,6 +473,52 @@ public sealed class RecordingService
         }
         catch
         {
+        }
+    }
+
+    private static bool TryValidateOutputDirectory(string outputDirectory, out string? error)
+    {
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            error = "输出目录为空，请在设置中指定一个有效的输出路径。";
+            return false;
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(outputDirectory);
+            var root = Path.GetPathRoot(fullPath);
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                error = "输出目录路径无效，请选择一个本地驱动器上的文件夹。";
+                return false;
+            }
+
+            if (!Directory.Exists(fullPath))
+            {
+                Directory.CreateDirectory(fullPath);
+            }
+
+            var testFile = Path.Combine(fullPath, $"._writetest_{Guid.NewGuid():N}");
+            try
+            {
+                File.WriteAllText(testFile, string.Empty);
+                File.Delete(testFile);
+            }
+            catch
+            {
+                error = $"输出目录不可写：{fullPath}。请检查磁盘空间和文件夹权限。";
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"输出目录验证失败：{ex.Message}";
+            return false;
         }
     }
 

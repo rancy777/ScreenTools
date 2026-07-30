@@ -177,12 +177,25 @@ public sealed class ReplayBufferService
             return;
         }
 
-        var jpegBytes = _screenCaptureService.CaptureFrameJpegBytes(_session.QualityPreset);
-        lock (_sync)
+        try
         {
-            _frames.AddLast(new ReplayFrameSnapshot(DateTimeOffset.Now, jpegBytes));
-            _bufferedBytes += jpegBytes.LongLength;
-            TrimFrames();
+            var jpegBytes = _screenCaptureService.CaptureFrameJpegBytes(_session.QualityPreset);
+            if (jpegBytes.Length == 0)
+            {
+                return;
+            }
+
+            lock (_sync)
+            {
+                _frames.AddLast(new ReplayFrameSnapshot(DateTimeOffset.Now, jpegBytes));
+                _bufferedBytes += jpegBytes.LongLength;
+                TrimFrames();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Surface the error so the active recording can log it instead of silently dropping frames.
+            _session.RecordingError = ex;
         }
     }
 

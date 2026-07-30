@@ -5,6 +5,8 @@ VisualStudioVersion = 17.14.36414.22 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenTools", "ScreenTools\ScreenTools.csproj", "{6F550AA5-EC39-4B42-BCF3-65765304AA4F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenTools.Tests", "ScreenTools.Tests\ScreenTools.Tests.csproj", "{B8A2D5C1-9E4F-4A7D-8C3B-1F2E3D4C5B6A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{6F550AA5-EC39-4B42-BCF3-65765304AA4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6F550AA5-EC39-4B42-BCF3-65765304AA4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6F550AA5-EC39-4B42-BCF3-65765304AA4F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8A2D5C1-9E4F-4A7D-8C3B-1F2E3D4C5B6A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8A2D5C1-9E4F-4A7D-8C3B-1F2E3D4C5B6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8A2D5C1-9E4F-4A7D-8C3B-1F2E3D4C5B6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8A2D5C1-9E4F-4A7D-8C3B-1F2E3D4C5B6A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -23,3 +29,6 @@ Global
 		SolutionGuid = {12BB8425-3A4B-4740-8358-427DFABF67EE}
 	EndGlobalSection
 EndGlobal
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenTools.Package", "ScreenTools.Package\ScreenTools.Package.csproj", "{A1B2C3D4-5E6F-7A8B-9C0D-1E2F3A4B5C6D}"
+EndProject
