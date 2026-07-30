@@ -18,11 +18,12 @@ public sealed class RecordingService
     private readonly ScreenCaptureService _screenCaptureService;
     private readonly FrameSequenceEncoder _frameSequenceEncoder;
     private readonly MicrophoneCaptureService _microphoneCaptureService;
-    private readonly SystemAudioCaptureService _systemAudioCaptureService;
+    private readonly WasapiLoopbackCaptureService _systemAudioCaptureService;
     private readonly List<RecordingFrameInfo> _capturedFrames = [];
     private readonly List<string> _detailMessages = [];
     private readonly SemaphoreSlim _captureLock = new(1, 1);
     private readonly object _frameSync = new();
+    private bool _isCapturing;
     private string? _workingDirectory;
     private string? _microphoneAudioPath;
     private string? _systemAudioPath;
@@ -36,7 +37,7 @@ public sealed class RecordingService
         ScreenCaptureService screenCaptureService,
         FrameSequenceEncoder frameSequenceEncoder,
         MicrophoneCaptureService microphoneCaptureService,
-        SystemAudioCaptureService systemAudioCaptureService,
+        WasapiLoopbackCaptureService systemAudioCaptureService,
         TempWorkspaceService tempWorkspaceService)
     {
         _screenCaptureService = screenCaptureService;
@@ -84,6 +85,16 @@ public sealed class RecordingService
         if (Status != RecordingStatus.Idle)
         {
             return;
+        }
+
+        if (session is null)
+        {
+            throw new ArgumentNullException(nameof(session));
+        }
+
+        if (!TryValidateOutputDirectory(session.OutputDirectory, out var outputError))
+        {
+            throw new InvalidOperationException($"无法开始录制：{outputError}");
         }
 
         _systemAudioCaptureService.RefreshAvailability();
@@ -154,6 +165,23 @@ public sealed class RecordingService
         ElapsedChanged?.Invoke(this, Elapsed);
     }
 
+    private const long MaxRecordingMemoryBytes = 2L * 1024 * 1024 * 1024; // 2 GB
+    private const int FrameMemoryEstimateBytes = 512 * 1024; // ~512 KB per frame (JPEG)
+
+    private void CheckRecordingMemoryBudget()
+    {
+        if (ActiveSession is null)
+        {
+            return;
+        }
+
+        var estimatedMemory = (long)_capturedFrames.Count * FrameMemoryEstimateBytes;
+        if (estimatedMemory > MaxRecordingMemoryBytes)
+        {
+            _detailMessages.Insert(0, $"录制内存占用过高（约 {estimatedMemory / (1024 * 1024)} MB），建议尽快结束录制。");
+        }
+    }
+
     public void TogglePause()
     {
         if (Status == RecordingStatus.Recording)
@@ -163,6 +191,7 @@ public sealed class RecordingService
             _microphoneCaptureService.Pause();
             _systemAudioCaptureService.Pause();
             SetStatus(RecordingStatus.Paused);
+            _detailMessages.Insert(0, $"录制已暂停于 {DateTimeOffset.Now:HH:mm:ss}。");
             RaiseRuntimeInfoChanged();
             return;
         }
@@ -174,6 +203,7 @@ public sealed class RecordingService
             _microphoneCaptureService.Resume();
             _systemAudioCaptureService.Resume();
             SetStatus(RecordingStatus.Recording);
+            _detailMessages.Insert(0, $"录制已恢复于 {DateTimeOffset.Now:HH:mm:ss}。");
             RaiseRuntimeInfoChanged();
         }
     }
@@ -186,15 +216,21 @@ public sealed class RecordingService
             _captureTimer.Stop();
             _elapsedTimer.Stop();
             _captureLock.Wait();
-            _captureLock.Release();
-            _stopwatch.Stop();
-            _finalElapsed = _stopwatch.Elapsed;
-            _microphoneCaptureService.Stop();
-            _systemAudioCaptureService.Stop();
-
-            if (ActiveSession is not null && _workingDirectory is not null)
+            try
             {
-                artifact = PersistArtifact(ActiveSession, _workingDirectory);
+                _stopwatch.Stop();
+                _finalElapsed = _stopwatch.Elapsed;
+                _microphoneCaptureService.Stop();
+                _systemAudioCaptureService.Stop();
+
+                if (ActiveSession is not null && _workingDirectory is not null)
+                {
+                    artifact = PersistArtifact(ActiveSession, _workingDirectory);
+                }
+            }
+            finally
+            {
+                _captureLock.Release();
             }
         }
         finally
@@ -212,11 +248,17 @@ public sealed class RecordingService
             _captureTimer.Stop();
             _elapsedTimer.Stop();
             _captureLock.Wait();
-            _captureLock.Release();
-            _stopwatch.Stop();
-            _finalElapsed = _stopwatch.Elapsed;
-            _microphoneCaptureService.Stop();
-            _systemAudioCaptureService.Stop();
+            try
+            {
+                _stopwatch.Stop();
+                _finalElapsed = _stopwatch.Elapsed;
+                _microphoneCaptureService.Stop();
+                _systemAudioCaptureService.Stop();
+            }
+            finally
+            {
+                _captureLock.Release();
+            }
         }
         finally
         {
@@ -243,33 +285,51 @@ public sealed class RecordingService
             return;
         }
 
-        if (!await _captureLock.WaitAsync(0))
+        if (_isCapturing)
         {
             return;
         }
 
+        _isCapturing = true;
         try
         {
-            var frameIndex = _frameIndex;
-            var fileName = $"frame-{frameIndex:D4}.jpg";
-            var filePath = Path.Combine(_workingDirectory, fileName);
-            var frameOffset = _stopwatch.Elapsed;
-            var qualityPreset = ActiveSession.QualityPreset;
-            await Task.Run(() => _screenCaptureService.CaptureFrameJpeg(filePath, qualityPreset));
-            lock (_frameSync)
+            if (!await _captureLock.WaitAsync(0))
             {
-                _capturedFrames.Add(new RecordingFrameInfo(fileName, frameOffset));
-                _frameIndex++;
+                return;
             }
-        }
-        catch (Exception ex)
-        {
-            _captureTimer.Stop();
-            _detailMessages.Insert(0, $"录制帧采集失败：{ex.Message}");
+
+            try
+            {
+                var frameIndex = _frameIndex;
+                var fileName = $"frame-{frameIndex:D4}.jpg";
+                var filePath = Path.Combine(_workingDirectory, fileName);
+                var frameOffset = _stopwatch.Elapsed;
+                var qualityPreset = ActiveSession.QualityPreset;
+                await Task.Run(() => _screenCaptureService.CaptureFrameJpeg(filePath, qualityPreset));
+                lock (_frameSync)
+                {
+                    _capturedFrames.Add(new RecordingFrameInfo(fileName, frameOffset));
+                    _frameIndex++;
+                }
+
+                CheckRecordingMemoryBudget();
+            }
+            catch (Exception ex)
+            {
+                _detailMessages.Insert(0, $"录制帧采集失败：{ex.Message}");
+                _captureTimer.Interval = ActiveSession is not null
+                    ? TimeSpan.FromMilliseconds(Math.Max(66, 1000.0 / CaptureQualityProfile.FromPreset(ActiveSession.QualityPreset).RecordingFrameRate))
+                    : TimeSpan.FromMilliseconds(500);
+                _captureTimer.Start();
+            }
+            finally
+            {
+                _captureLock.Release();
+            }
         }
         finally
         {
-            _captureLock.Release();
+            _isCapturing = false;
         }
     }
 
@@ -460,6 +520,52 @@ public sealed class RecordingService
         }
         catch
         {
+        }
+    }
+
+    private static bool TryValidateOutputDirectory(string outputDirectory, out string? error)
+    {
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            error = "输出目录为空，请在设置中指定一个有效的输出路径。";
+            return false;
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(outputDirectory);
+            var root = Path.GetPathRoot(fullPath);
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                error = "输出目录路径无效，请选择一个本地驱动器上的文件夹。";
+                return false;
+            }
+
+            if (!Directory.Exists(fullPath))
+            {
+                Directory.CreateDirectory(fullPath);
+            }
+
+            var testFile = Path.Combine(fullPath, $"._writetest_{Guid.NewGuid():N}");
+            try
+            {
+                File.WriteAllText(testFile, string.Empty);
+                File.Delete(testFile);
+            }
+            catch
+            {
+                error = $"输出目录不可写：{fullPath}。请检查磁盘空间和文件夹权限。";
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"输出目录验证失败：{ex.Message}";
+            return false;
         }
     }
 

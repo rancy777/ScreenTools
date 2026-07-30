@@ -10,9 +10,10 @@ using System.Windows.Media.Imaging;
 
 namespace ScreenTools;
 
-public sealed class ClipboardManagerService
+public sealed class ClipboardManagerService : IClipboardManagerService
 {
     private const int MaxEntries = 8;
+    private const string CustomFormatName = "LensSnap.ClipboardEntry.v1";
     private readonly string _historyPath;
     private readonly List<ClipboardEntry> _entries = [];
 
@@ -48,7 +49,7 @@ public sealed class ClipboardManagerService
         }
 
         Exception? lastError = null;
-        for (var attempt = 0; attempt < 5; attempt++)
+        for (var attempt = 0; attempt < 3; attempt++)
         {
             try
             {
@@ -59,11 +60,6 @@ public sealed class ClipboardManagerService
             {
                 lastError = ex;
                 Thread.Sleep(60 * (attempt + 1));
-            }
-            catch (Exception ex)
-            {
-                lastError = ex;
-                break;
             }
         }
 
@@ -128,9 +124,16 @@ public sealed class ClipboardManagerService
 
     private void Save()
     {
-        File.WriteAllText(
-            _historyPath,
-            JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true }));
+        try
+        {
+            File.WriteAllText(
+                _historyPath,
+                JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch
+        {
+            // Clipboard history persistence is best-effort.
+        }
     }
 
     private static string GetFailureDetail(Exception? error)

@@ -26,6 +26,7 @@ public partial class RegionSelectionWindow : Window
         Width = bounds.Width;
         Height = bounds.Height;
         Loaded += (_, _) => UpdateInspector(Mouse.GetPosition(this));
+        Closed += Window_Closed;
     }
 
     public Rect? SelectedRegion { get; private set; }
@@ -49,12 +50,24 @@ public partial class RegionSelectionWindow : Window
         }
 
         UpdateSelection(_dragStartPoint.Value, current);
+
+        var rect = BuildCanvasRect(_dragStartPoint.Value, current);
+        if (rect.Width < 4 || rect.Height < 4)
+        {
+            Mouse.OverrideCursor = Cursors.No;
+        }
+        else
+        {
+            Mouse.OverrideCursor = null;
+        }
     }
 
     private void Window_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (_dragStartPoint is null)
         {
+            ReleaseMouseCapture();
+            Mouse.OverrideCursor = null;
             return;
         }
 
@@ -62,6 +75,7 @@ public partial class RegionSelectionWindow : Window
         ReleaseMouseCapture();
         SelectedRegion = BuildAbsoluteRect(_dragStartPoint.Value, current);
         _dragStartPoint = null;
+        Mouse.OverrideCursor = null;
 
         if (SelectedRegion.Value.Width < 4 || SelectedRegion.Value.Height < 4)
         {
@@ -78,9 +92,17 @@ public partial class RegionSelectionWindow : Window
     {
         if (e.Key == Key.Escape)
         {
+            ReleaseMouseCapture();
             SelectedRegion = null;
+            Mouse.OverrideCursor = null;
             Close();
         }
+    }
+
+    private void Window_Closed(object? sender, EventArgs e)
+    {
+        ReleaseMouseCapture();
+        Mouse.OverrideCursor = null;
     }
 
     private void UpdateSelection(Point start, Point end)

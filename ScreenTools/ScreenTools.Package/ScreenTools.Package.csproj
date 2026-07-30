@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <UseWindowsForms>false</UseWindowsForms>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <OutputPath>bin\MSIX\</OutputPath>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <PackageIdentifier>com.screentools.app</PackageIdentifier>
+    <PackageName>ScreenTools</PackageName>
+    <PackageDisplayName>ScreenTools</PackageDisplayName>
+    <PackagePublisher>ScreenTools</PackagePublisher>
+    <PackageVersion>1.0.0.0</PackageVersion>
+    <PackageDescription>Screen capture, clipboard history, and replay tool.</PackageDescription>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScreenTools\ScreenTools.csproj" />
+    <Content Include="..\ScreenTools\app.manifest">
+      <Link>app.manifest</Link>
+    </Content>
+    <Content Include="Assets\Square44x44Logo.png" />
+    <Content Include="Assets\Square150x150Logo.png" />
+    <Content Include="Assets\Wide310x150Logo.png" />
+  </ItemGroup>
+</Project>

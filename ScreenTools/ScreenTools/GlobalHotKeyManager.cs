@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
@@ -47,6 +48,8 @@ public sealed class GlobalHotKeyManager : IDisposable
     }
 
     public event EventHandler<ShortcutAction>? HotKeyPressed;
+    public event EventHandler<HookInstallationFailedEventArgs>? HookInstallationFailed;
+    public event EventHandler<ShortcutAction>? HotKeyConflictDetected;
 
     public bool IsSuspended { get; set; }
 
@@ -73,8 +76,19 @@ public sealed class GlobalHotKeyManager : IDisposable
         }
 
         _keyboardHook = SetHook(WhKeyboardLl, _keyboardProc);
+        if (_keyboardHook == IntPtr.Zero)
+        {
+            HookInstallationFailed?.Invoke(this, new HookInstallationFailedEventArgs("keyboard", Marshal.GetLastWin32Error()));
+        }
+
         _mouseHook = SetHook(WhMouseLl, _mouseProc);
+        if (_mouseHook == IntPtr.Zero)
+        {
+            HookInstallationFailed?.Invoke(this, new HookInstallationFailedEventArgs("mouse", Marshal.GetLastWin32Error()));
+        }
     }
+
+    public sealed record HookInstallationFailedEventArgs(string HookType, int ErrorCode);
 
     private IntPtr KeyboardHookCallback(int code, IntPtr wParam, IntPtr lParam)
     {
@@ -158,8 +172,23 @@ public sealed class GlobalHotKeyManager : IDisposable
             }
 
             _armedActions.Add(action);
+
+            if (IsSystemReservedGesture(gesture))
+            {
+                Application.Current.Dispatcher.BeginInvoke(() => HotKeyConflictDetected?.Invoke(this, action));
+                continue;
+            }
+
             Application.Current.Dispatcher.BeginInvoke(() => HotKeyPressed?.Invoke(this, action));
         }
+    }
+
+    private static bool IsSystemReservedGesture(ShortcutGesture gesture)
+    {
+        var tokens = gesture.Tokens;
+        return tokens.Any(token => token.Equals("Ctrl", StringComparison.OrdinalIgnoreCase)) &&
+               tokens.Any(token => token.Equals("Alt", StringComparison.OrdinalIgnoreCase)) &&
+               tokens.Any(token => token.Equals("Delete", StringComparison.OrdinalIgnoreCase));
     }
 
     private void DisarmReleasedBindings()
