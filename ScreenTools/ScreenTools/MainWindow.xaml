@@ -1,0 +1,1060 @@
+<Window x:Class="ScreenTools.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:controls="clr-namespace:ScreenTools.Controls"
+        mc:Ignorable="d"
+        Title="LensSnap"
+        Width="1280"
+        Height="1040"
+        MinWidth="1100"
+        MinHeight="900"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+
+        <!-- ═══════════════════════════════════════════
+             BRUSHES
+             ═══════════════════════════════════════════ -->
+        <SolidColorBrush x:Key="PageBackgroundBrush"   Color="#F5F6F8"/>
+        <SolidColorBrush x:Key="CardBackgroundBrush"   Color="#FFFFFF"/>
+        <!-- #38 = round(0.22 × 255) = 56 → 22 % alpha -->
+        <SolidColorBrush x:Key="CardBorderBrush"       Color="#38AAB1B2"/>
+        <!-- #47 = round(0.28 × 255) = 71 → 28 % alpha -->
+        <SolidColorBrush x:Key="HairlineBrush"         Color="#47AAB1B2"/>
+        <SolidColorBrush x:Key="PrimaryBrush"          Color="#005EB1"/>
+        <!-- #12 = round(0.07 × 255) = 18 → 7 % alpha -->
+        <SolidColorBrush x:Key="PrimaryChipBrush"      Color="#12005EB1"/>
+        <!-- #40 = round(0.25 × 255) = 64 → 25 % alpha -->
+        <SolidColorBrush x:Key="PrimaryBorderBrush"    Color="#40005EB1"/>
+        <SolidColorBrush x:Key="HeadingBrush"          Color="#0F172A"/>
+        <SolidColorBrush x:Key="BodyBrush"             Color="#374151"/>
+        <SolidColorBrush x:Key="SubtleTextBrush"       Color="#6B7280"/>
+        <SolidColorBrush x:Key="KeycapBrush"           Color="#EEF0F1"/>
+        <SolidColorBrush x:Key="KeycapBorderBrush"     Color="#D8DCDD"/>
+        <SolidColorBrush x:Key="TrackOffBrush"         Color="#CDD1D2"/>
+        <SolidColorBrush x:Key="SegmentBgBrush"        Color="#EDF2F3"/>
+        <SolidColorBrush x:Key="SegmentBorderBrush"    Color="#E0E5E6"/>
+        <SolidColorBrush x:Key="ValueChipBrush"        Color="#EDF2F3"/>
+        <SolidColorBrush x:Key="ComboItemHoverBrush"   Color="#F0F4F5"/>
+
+        <!-- ═══════════════════════════════════════════
+             CORNER RADII
+             ═══════════════════════════════════════════ -->
+        <CornerRadius x:Key="RadiusSmall">5</CornerRadius>
+        <CornerRadius x:Key="RadiusMedium">7</CornerRadius>
+        <CornerRadius x:Key="RadiusLarge">10</CornerRadius>
+        <CornerRadius x:Key="RadiusCard">14</CornerRadius>
+        <CornerRadius x:Key="RadiusIconBox">8</CornerRadius>
+
+        <!-- ═══════════════════════════════════════════
+             DROP SHADOW EFFECTS
+             ═══════════════════════════════════════════ -->
+        <DropShadowEffect x:Key="CardShadow"
+                          BlurRadius="10" ShadowDepth="1" Direction="270"
+                          Color="#0F172A" Opacity="0.05"/>
+        <DropShadowEffect x:Key="FloatingBarShadow"
+                          BlurRadius="18" ShadowDepth="2" Direction="270"
+                          Color="#0F172A" Opacity="0.09"/>
+        <DropShadowEffect x:Key="DropdownShadow"
+                          BlurRadius="14" ShadowDepth="2" Direction="270"
+                          Color="#0F172A" Opacity="0.08"/>
+        <DropShadowEffect x:Key="ToggleThumbShadow"
+                          BlurRadius="6" ShadowDepth="1" Direction="270"
+                          Color="#0F172A" Opacity="0.12"/>
+
+        <!-- ═══════════════════════════════════════════
+             FONT
+             ═══════════════════════════════════════════ -->
+        <FontFamily x:Key="MonoFontFamily">Consolas, Courier New</FontFamily>
+
+        <!-- ═══════════════════════════════════════════
+             CARD STYLE
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="SectionCardStyle" TargetType="Border">
+            <Setter Property="Background"      Value="{StaticResource CardBackgroundBrush}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource CardBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0.5"/>
+            <Setter Property="CornerRadius"    Value="{StaticResource RadiusCard}"/>
+            <Setter Property="Padding"         Value="24"/>
+            <Setter Property="Margin"          Value="0,0,0,16"/>
+            <Setter Property="Effect"          Value="{StaticResource CardShadow}"/>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             CARD ICON BOX
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="CardIconBoxStyle" TargetType="Border">
+            <Setter Property="Width"           Value="32"/>
+            <Setter Property="Height"          Value="32"/>
+            <Setter Property="Background"      Value="{StaticResource KeycapBrush}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource KeycapBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0.5"/>
+            <Setter Property="CornerRadius"    Value="{StaticResource RadiusIconBox}"/>
+        </Style>
+
+        <Style x:Key="CardIconViewboxStyle" TargetType="Viewbox">
+            <Setter Property="Width"  Value="14"/>
+            <Setter Property="Height" Value="14"/>
+        </Style>
+
+        <Style x:Key="CardIconPathStyle" TargetType="Path">
+            <Setter Property="Stroke"              Value="#6B7280"/>
+            <Setter Property="StrokeThickness"     Value="1.25"/>
+            <Setter Property="Fill"                Value="Transparent"/>
+            <Setter Property="StrokeLineJoin"      Value="Round"/>
+            <Setter Property="StrokeStartLineCap"  Value="Round"/>
+            <Setter Property="StrokeEndLineCap"    Value="Round"/>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             TEXT STYLES
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="EyebrowStyle" TargetType="TextBlock">
+            <Setter Property="FontSize"         Value="10"/>
+            <Setter Property="FontWeight"       Value="Bold"/>
+            <Setter Property="Foreground"       Value="{StaticResource PrimaryBrush}"/>
+        </Style>
+
+        <Style x:Key="PageTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize"   Value="26"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource HeadingBrush}"/>
+            <Setter Property="LineHeight" Value="34"/>
+        </Style>
+
+        <Style x:Key="PageSubtitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="Foreground"   Value="{StaticResource SubtleTextBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight"   Value="21"/>
+        </Style>
+
+        <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize"   Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource HeadingBrush}"/>
+        </Style>
+
+        <Style x:Key="CardDescStyle" TargetType="TextBlock">
+            <Setter Property="FontSize"  Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource SubtleTextBrush}"/>
+            <Setter Property="Margin"    Value="0,3,0,0"/>
+        </Style>
+
+        <Style x:Key="StatusTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize"   Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource HeadingBrush}"/>
+        </Style>
+
+        <Style x:Key="StatusMetaStyle" TargetType="TextBlock">
+            <Setter Property="FontSize"  Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource SubtleTextBrush}"/>
+            <Setter Property="Margin"    Value="0,3,0,0"/>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             ROW SEPARATOR
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="RowSeparatorStyle" TargetType="Rectangle">
+            <Setter Property="Height" Value="0.5"/>
+            <Setter Property="Fill"   Value="{StaticResource HairlineBrush}"/>
+            <Setter Property="Margin" Value="0,8"/>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             TOGGLE SWITCH
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="ToggleSwitchStyle" TargetType="CheckBox">
+            <Setter Property="Width"  Value="40"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Width="{TemplateBinding Width}"
+                              Height="{TemplateBinding Height}">
+                            <Border x:Name="Track"
+                                    Background="{StaticResource TrackOffBrush}"
+                                    CornerRadius="11"/>
+                            <Border x:Name="Thumb"
+                                    Width="16" Height="16"
+                                    Margin="3,3,0,3"
+                                    HorizontalAlignment="Left"
+                                    Background="#FFFFFF"
+                                    BorderBrush="#22000000"
+                                    BorderThickness="0.5"
+                                    CornerRadius="8">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="6" ShadowDepth="1" Direction="270"
+                                                      Color="#0F172A" Opacity="0.12"/>
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,3,3,3"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             SEGMENT BUTTON (RadioButton)
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="SegmentButtonStyle" TargetType="RadioButton">
+            <Setter Property="FontSize"   Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource SubtleTextBrush}"/>
+            <Setter Property="Padding"    Value="12,5"/>
+            <Setter Property="Cursor"     Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bg"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="0.5"
+                                CornerRadius="{StaticResource RadiusSmall}"
+                                Padding="{TemplateBinding Padding}">
+                            <TextBlock x:Name="Label"
+                                       Text="{TemplateBinding Content}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bg"    Property="Background"   Value="#FFFFFF"/>
+                                <Setter TargetName="Bg"    Property="BorderBrush"  Value="{StaticResource HairlineBrush}"/>
+                                <Setter TargetName="Label" Property="Foreground"   Value="{StaticResource HeadingBrush}"/>
+                                <Setter TargetName="Label" Property="FontWeight"   Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             COMBOBOX TOGGLE BUTTON (internal part)
+             ═══════════════════════════════════════════ -->
+        <ControlTemplate x:Key="ComboBoxToggleTemplate" TargetType="ToggleButton">
+            <Border x:Name="Bg"
+                    Background="{StaticResource KeycapBrush}"
+                    BorderBrush="{StaticResource KeycapBorderBrush}"
+                    BorderThickness="0.5"
+                    CornerRadius="{StaticResource RadiusMedium}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="22"/>
+                    </Grid.ColumnDefinitions>
+                    <!-- spacer so ContentPresenter in ComboBox template has room -->
+                    <Border Grid.Column="0"/>
+                    <Path x:Name="Arrow"
+                          Grid.Column="1"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Data="M 0,0 L 4,4 L 8,0"
+                          Stroke="#6B7280"
+                          StrokeThickness="1.2"
+                          StrokeLineJoin="Round"/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bg" Property="BorderBrush" Value="{StaticResource PrimaryBorderBrush}"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter TargetName="Bg" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- ═══════════════════════════════════════════
+             COMBOBOX
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="SettingsComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Foreground"         Value="{StaticResource HeadingBrush}"/>
+            <Setter Property="FontSize"           Value="12"/>
+            <Setter Property="MinWidth"           Value="120"/>
+            <Setter Property="Height"             Value="30"/>
+            <Setter Property="Cursor"             Value="Hand"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <!-- Dropdown toggle covers entire control -->
+                            <ToggleButton x:Name="ToggleButton"
+                                          Template="{StaticResource ComboBoxToggleTemplate}"
+                                          Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay,
+                                              RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press"/>
+                            <!-- Selected item display -->
+                            <ContentPresenter x:Name="ContentSite"
+                                              IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              Margin="10,0,24,0"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"/>
+                            <!-- Popup -->
+                            <Popup x:Name="Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Slide">
+                                <Grid x:Name="DropDown"
+                                      SnapsToDevicePixels="True"
+                                      MinWidth="{TemplateBinding ActualWidth}"
+                                      MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border x:Name="DropDownBorder"
+                                            Background="#FFFFFF"
+                                            BorderBrush="{StaticResource CardBorderBrush}"
+                                            BorderThickness="0.5"
+                                            CornerRadius="{StaticResource RadiusMedium}"
+                                            Margin="0,3,0,0"
+                                            Padding="4">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="14" ShadowDepth="2" Direction="270"
+                                                              Color="#0F172A" Opacity="0.08"/>
+                                        </Border.Effect>
+                                        <ScrollViewer SnapsToDevicePixels="True">
+                                            <StackPanel IsItemsHost="True"
+                                                        KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="FontSize"   Value="12"/>
+                        <Setter Property="Foreground" Value="{StaticResource HeadingBrush}"/>
+                        <Setter Property="Padding"    Value="10,7"/>
+                        <Setter Property="Cursor"     Value="Hand"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ComboBoxItem">
+                                    <Border x:Name="ItemBg"
+                                            Background="Transparent"
+                                            CornerRadius="5"
+                                            Margin="0,1"
+                                            Padding="{TemplateBinding Padding}">
+                                        <TextBlock Text="{TemplateBinding Content}"
+                                                   FontSize="{TemplateBinding FontSize}"
+                                                   Foreground="{TemplateBinding Foreground}"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="ItemBg" Property="Background"
+                                                    Value="{StaticResource ComboItemHoverBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="ItemBg" Property="Background"
+                                                    Value="{StaticResource PrimaryChipBrush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             KBD BUTTON (shortcut display)
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="KbdButtonStyle" TargetType="Button">
+            <Setter Property="Background"      Value="{StaticResource KeycapBrush}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource KeycapBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0.5"/>
+            <Setter Property="Foreground"      Value="{StaticResource HeadingBrush}"/>
+            <Setter Property="FontSize"        Value="12"/>
+            <Setter Property="FontFamily"      Value="{StaticResource MonoFontFamily}"/>
+            <Setter Property="Padding"         Value="12,6"/>
+            <Setter Property="MinWidth"        Value="100"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource RadiusMedium}"
+                                Padding="{TemplateBinding Padding}">
+                            <TextBlock x:Name="Label"
+                                       Text="{TemplateBinding Content}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       FontFamily="{TemplateBinding FontFamily}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg"    Property="BorderBrush" Value="{StaticResource PrimaryBorderBrush}"/>
+                                <Setter TargetName="Label" Property="Foreground"  Value="{StaticResource PrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#E5E8E9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             LINK BUTTON (action buttons)
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="LinkButtonStyle" TargetType="Button">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource PrimaryBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0.5"/>
+            <Setter Property="Foreground"      Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="FontSize"        Value="12"/>
+            <Setter Property="Padding"         Value="12,6"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource RadiusMedium}"
+                                Padding="{TemplateBinding Padding}">
+                            <TextBlock Text="{TemplateBinding Content}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource PrimaryChipBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#1A005EB1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             VALUE CHIP (read-only info badge)
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="ValueChipStyle" TargetType="Border">
+            <Setter Property="Background"      Value="{StaticResource ValueChipBrush}"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource HairlineBrush}"/>
+            <Setter Property="BorderThickness" Value="0.5"/>
+            <Setter Property="CornerRadius"    Value="{StaticResource RadiusSmall}"/>
+            <Setter Property="Padding"         Value="10,5"/>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             STATUS BANNER
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="StatusBannerStyle" TargetType="Border">
+            <Setter Property="Background"      Value="#FFFFFF"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource HairlineBrush}"/>
+            <Setter Property="BorderThickness" Value="0.5"/>
+            <Setter Property="CornerRadius"    Value="{StaticResource RadiusLarge}"/>
+            <Setter Property="Padding"         Value="14,12"/>
+            <Setter Property="Margin"          Value="0,20,0,0"/>
+        </Style>
+
+        <!-- ═══════════════════════════════════════════
+             SHORTCUT CAPTURE OVERLAY BANNER
+             ═══════════════════════════════════════════ -->
+        <Style x:Key="ShortcutCaptureBannerStyle" TargetType="Border">
+            <Setter Property="Background"      Value="#F5FAFF"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource PrimaryBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0.5"/>
+            <Setter Property="CornerRadius"    Value="{StaticResource RadiusLarge}"/>
+            <Setter Property="Padding"         Value="18,14"/>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid Background="{StaticResource PageBackgroundBrush}">
+
+        <!-- ═══════════════════════════════════════════
+             SHORTCUT CAPTURE OVERLAY
+             ═══════════════════════════════════════════ -->
+        <Border x:Name="ShortcutCaptureBanner"
+                Style="{StaticResource ShortcutCaptureBannerStyle}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,72,0,0"
+                Visibility="Collapsed"
+                Panel.ZIndex="10">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="20" ShadowDepth="4" Direction="270"
+                                  Color="#005EB1" Opacity="0.08"/>
+            </Border.Effect>
+            <StackPanel>
+                <TextBlock x:Name="ShortcutCaptureTitleText"
+                           FontSize="13" FontWeight="SemiBold"
+                           Foreground="{StaticResource HeadingBrush}"
+                           Text="正在录入快捷键"/>
+                <TextBlock x:Name="ShortcutCaptureHintText"
+                           Margin="0,5,0,0"
+                           FontSize="12"
+                           Foreground="{StaticResource SubtleTextBrush}"
+                           Text="按下键盘或鼠标组合，Esc 取消，Backspace 清空。"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════
+             MAIN SCROLL AREA
+             ═══════════════════════════════════════════ -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Background="{StaticResource PageBackgroundBrush}">
+            <Grid Margin="80,0">
+                <StackPanel Width="900"
+                            Margin="0,108,0,80"
+                            HorizontalAlignment="Center">
+
+                    <!-- ───────────────────────────────
+                         PAGE HEADER
+                         ─────────────────────────────── -->
+                    <StackPanel Margin="0,0,0,36">
+                        <TextBlock Style="{StaticResource EyebrowStyle}"
+                                   Text="SETTINGS"/>
+                        <TextBlock Margin="0,12,0,0"
+                                   Style="{StaticResource PageTitleStyle}"
+                                   Text="让高频操作更安静地待在前台"/>
+                        <TextBlock Margin="0,10,0,0"
+                                   MaxWidth="460"
+                                   HorizontalAlignment="Left"
+                                   Style="{StaticResource PageSubtitleStyle}"
+                                   Text="围绕截图、录制与回录保留必要控制，让界面退后，让动作留在前面。"/>
+
+                        <!-- Status Banner -->
+                        <Border x:Name="StatusBanner"
+                                Style="{StaticResource StatusBannerStyle}"
+                                MaxWidth="520"
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="StatusIndicator"
+                                         Width="7" Height="7"
+                                         Margin="0,5,12,0"
+                                         VerticalAlignment="Top"
+                                         Fill="{StaticResource PrimaryBrush}"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="StatusMessageText"
+                                               Style="{StaticResource StatusTitleStyle}"
+                                               Text="就绪"/>
+                                    <TextBlock x:Name="StatusMetaText"
+                                               Style="{StaticResource StatusMetaStyle}"
+                                               Text="等待下一次截图、录制或回录。"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ───────────────────────────────
+                         TWO-COLUMN CONTENT GRID
+                         ─────────────────────────────── -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- ═══════════════════════════
+                             LEFT COLUMN
+                             ═══════════════════════════ -->
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+
+                            <!-- ╔══════════════════════╗
+                                 ║  截图设置            ║
+                                 ╚══════════════════════╝ -->
+                            <Border Style="{StaticResource SectionCardStyle}">
+                                <StackPanel>
+
+                                    <!-- Card header -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                                        <Border Style="{StaticResource CardIconBoxStyle}" Margin="0,0,12,0">
+                                            <Viewbox Style="{StaticResource CardIconViewboxStyle}">
+                                                <Canvas Width="14" Height="16">
+                                                    <Path Style="{StaticResource CardIconPathStyle}"
+                                                          Data="M2,0.5 H10 A1.5,1.5 0 0 1 11.5,2 V14 A1.5,1.5 0 0 1 10,15.5 H2 A1.5,1.5 0 0 1 0.5,14 V2 A1.5,1.5 0 0 1 2,0.5 Z
+                                                                 M4,4 H8.5
+                                                                 M4,12 H8.5"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="截图设置"/>
+                                            <TextBlock Style="{StaticResource CardDescStyle}"  Text="输出格式与保存位置"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- 保存格式 -->
+                                    <controls:SettingRowControl x:Name="ScreenshotFormatRow"
+                                                                Title="保存格式"
+                                                                Description="选择默认输出格式">
+                                        <controls:SettingRowControl.RightContent>
+                                            <ComboBox Style="{StaticResource SettingsComboBoxStyle}"
+                                                      SelectionChanged="ScreenshotFormatComboBox_SelectionChanged"
+                                                      SelectedIndex="0">
+                                                <ComboBoxItem Content="PNG"/>
+                                                <ComboBoxItem Content="JPG"/>
+                                                <ComboBoxItem Content="BMP"/>
+                                            </ComboBox>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 截图模式 -->
+                                    <controls:SettingRowControl x:Name="ScreenshotModeRow"
+                                                                Title="截图模式"
+                                                                Description="全屏截图或先框选区域">
+                                        <controls:SettingRowControl.RightContent>
+                                            <ComboBox Style="{StaticResource SettingsComboBoxStyle}"
+                                                      SelectionChanged="ScreenshotModeComboBox_SelectionChanged"
+                                                      SelectedIndex="0">
+                                                <ComboBoxItem Content="全屏"/>
+                                                <ComboBoxItem Content="区域"/>
+                                            </ComboBox>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 快捷键 -->
+                                    <controls:SettingRowControl Title="快捷键"
+                                                                Description="点击后按下键盘或鼠标组合">
+                                        <controls:SettingRowControl.RightContent>
+                                            <Button Style="{StaticResource KbdButtonStyle}"
+                                                    Click="ShortcutButton_Click"
+                                                    Tag="Screenshot"
+                                                    Content="Alt + A"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 截图后行为 -->
+                                    <controls:SettingRowControl x:Name="ScreenshotBehaviorRow"
+                                                                Title="截图后行为"
+                                                                Description="决定截图后是只保存、直接贴图，还是先显示操作条">
+                                        <controls:SettingRowControl.RightContent>
+                                            <ComboBox Style="{StaticResource SettingsComboBoxStyle}"
+                                                      SelectionChanged="ScreenshotBehaviorComboBox_SelectionChanged"
+                                                      SelectedIndex="0">
+                                                <ComboBoxItem Content="保存后显示操作条"/>
+                                                <ComboBoxItem Content="仅保存"/>
+                                                <ComboBoxItem Content="保存并贴到屏幕"/>
+                                            </ComboBox>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 复制到剪贴板 -->
+                                    <controls:SettingRowControl x:Name="CopyScreenshotRow"
+                                                                Title="复制到剪贴板"
+                                                                Description="截图完成后自动复制图像">
+                                        <controls:SettingRowControl.RightContent>
+                                            <CheckBox Style="{StaticResource ToggleSwitchStyle}"
+                                                      Checked="CopyScreenshotToggle_OnChanged"
+                                                      Unchecked="CopyScreenshotToggle_OnChanged"
+                                                      IsChecked="True"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 保存路径 -->
+                                    <controls:SettingRowControl x:Name="OutputDirectoryRow"
+                                                                Title="保存路径"
+                                                                Description="C:\Users\Admin\Pictures\LensSnap">
+                                        <controls:SettingRowControl.RightContent>
+                                            <Button Style="{StaticResource LinkButtonStyle}"
+                                                    Click="ChangeOutputDirectory_Click"
+                                                    Content="更改位置"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 贴纸管理 -->
+                                    <controls:SettingRowControl Title="贴纸管理"
+                                                                Description="关闭当前所有贴到屏幕上的截图">
+                                        <controls:SettingRowControl.RightContent>
+                                            <Button Style="{StaticResource LinkButtonStyle}"
+                                                    Click="CloseAllStickers_Click"
+                                                    Content="关闭全部贴纸"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ╔══════════════════════╗
+                                 ║  录屏设置            ║
+                                 ╚══════════════════════╝ -->
+                            <Border Style="{StaticResource SectionCardStyle}">
+                                <StackPanel>
+
+                                    <!-- Card header -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                                        <Border Style="{StaticResource CardIconBoxStyle}" Margin="0,0,12,0">
+                                            <Viewbox Style="{StaticResource CardIconViewboxStyle}">
+                                                <Canvas Width="16" Height="14">
+                                                    <Path Style="{StaticResource CardIconPathStyle}"
+                                                          Data="M0.5,1.5 H10.5 A1.5,1.5 0 0 1 12,3 V11 A1.5,1.5 0 0 1 10.5,12.5 H0.5 A1.5,1.5 0 0 1 -1,11 V3 A1.5,1.5 0 0 1 0.5,1.5 Z
+                                                                 M12,5 L15.5,2.5 V11.5 L12,9"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="录屏设置"/>
+                                            <TextBlock Style="{StaticResource CardDescStyle}"  Text="采集输入与画质"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- 麦克风 -->
+                                    <controls:SettingRowControl x:Name="MicrophoneRow"
+                                                                Title="麦克风"
+                                                                Description="包含麦克风音频">
+                                        <controls:SettingRowControl.RightContent>
+                                            <CheckBox Style="{StaticResource ToggleSwitchStyle}"
+                                                      Checked="MicrophoneToggle_OnChanged"
+                                                      Unchecked="MicrophoneToggle_OnChanged"
+                                                      IsChecked="True"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 系统声音 -->
+                                    <controls:SettingRowControl x:Name="SystemAudioRow"
+                                                                Title="系统声音"
+                                                                Description="包含系统播放音频">
+                                        <controls:SettingRowControl.RightContent>
+                                            <CheckBox Style="{StaticResource ToggleSwitchStyle}"
+                                                      Checked="SystemAudioToggle_OnChanged"
+                                                      Unchecked="SystemAudioToggle_OnChanged"
+                                                      IsChecked="True"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 快捷键 -->
+                                    <controls:SettingRowControl Title="快捷键"
+                                                                Description="点击后按下键盘或鼠标组合">
+                                        <controls:SettingRowControl.RightContent>
+                                            <Button Style="{StaticResource KbdButtonStyle}"
+                                                    Click="ShortcutButton_Click"
+                                                    Tag="Recording"
+                                                    Content="Alt + R"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 画质 -->
+                                    <controls:SettingRowControl x:Name="QualityPresetRow"
+                                                                Title="画质"
+                                                                Description="默认录制档位">
+                                        <controls:SettingRowControl.RightContent>
+                                            <ComboBox Style="{StaticResource SettingsComboBoxStyle}"
+                                                      SelectionChanged="QualityPresetComboBox_SelectionChanged"
+                                                      SelectedIndex="1">
+                                                <ComboBoxItem Content="720P 30FPS"/>
+                                                <ComboBoxItem Content="1080P 60FPS"/>
+                                                <ComboBoxItem Content="1440P 30FPS"/>
+                                            </ComboBox>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
+
+                        <!-- ═══════════════════════════
+                             RIGHT COLUMN
+                             ═══════════════════════════ -->
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+
+                            <!-- ╔══════════════════════╗
+                                 ║  回录设置            ║
+                                 ╚══════════════════════╝ -->
+                            <Border Style="{StaticResource SectionCardStyle}">
+                                <StackPanel>
+
+                                    <!-- Card header -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                                        <Border Style="{StaticResource CardIconBoxStyle}" Margin="0,0,12,0">
+                                            <Viewbox Style="{StaticResource CardIconViewboxStyle}">
+                                                <Canvas Width="14" Height="14">
+                                                    <Path Style="{StaticResource CardIconPathStyle}"
+                                                          Data="M7,0.5 A6.5,6.5 0 1 1 0.5,7
+                                                                 M0.5,2.5 L0.5,7 L4.5,7
+                                                                 M7,4 V7.5 L9.5,10"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="回录设置"/>
+                                            <TextBlock Style="{StaticResource CardDescStyle}"  Text="缓存开关与时长控制"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- 后台回录缓存 -->
+                                    <controls:SettingRowControl x:Name="ReplayBufferRow"
+                                                                Title="后台回录缓存"
+                                                                Description="启用后持续保留最近一段画面，关闭后不占用回录资源">
+                                        <controls:SettingRowControl.RightContent>
+                                            <CheckBox Style="{StaticResource ToggleSwitchStyle}"
+                                                      Checked="ReplayBufferToggle_OnChanged"
+                                                      Unchecked="ReplayBufferToggle_OnChanged"
+                                                      IsChecked="True"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 回录时长 -->
+                                    <controls:SettingRowControl x:Name="ReplayDurationRow"
+                                                                Title="回录时长"
+                                                                Description="保留触发前片段">
+                                        <controls:SettingRowControl.RightContent>
+                                            <Border Background="{StaticResource SegmentBgBrush}"
+                                                    BorderBrush="{StaticResource SegmentBorderBrush}"
+                                                    BorderThickness="0.5"
+                                                    CornerRadius="{StaticResource RadiusMedium}"
+                                                    Padding="3">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <RadioButton GroupName="ReplayDuration"
+                                                                 Style="{StaticResource SegmentButtonStyle}"
+                                                                 Checked="ReplayDuration_Checked"
+                                                                 Tag="30"
+                                                                 IsChecked="True"
+                                                                 Content="30s"/>
+                                                    <RadioButton GroupName="ReplayDuration"
+                                                                 Style="{StaticResource SegmentButtonStyle}"
+                                                                 Checked="ReplayDuration_Checked"
+                                                                 Tag="60"
+                                                                 Content="60s"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 快捷键 -->
+                                    <controls:SettingRowControl Title="快捷键"
+                                                                Description="点击后按下键盘或鼠标组合">
+                                        <controls:SettingRowControl.RightContent>
+                                            <Button Style="{StaticResource KbdButtonStyle}"
+                                                    Click="ShortcutButton_Click"
+                                                    Tag="Replay"
+                                                    Content="Alt + S"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                    <Rectangle Style="{StaticResource RowSeparatorStyle}"/>
+
+                                    <!-- 回录音频（只读信息） -->
+                                    <controls:SettingRowControl Title="回录音频"
+                                                                Description="当前回录仅保存画面，不包含麦克风或系统声音">
+                                        <controls:SettingRowControl.RightContent>
+                                            <Border Style="{StaticResource ValueChipStyle}">
+                                                <TextBlock FontSize="11"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource BodyBrush}"
+                                                           Text="仅画面"/>
+                                            </Border>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ╔══════════════════════╗
+                                 ║  剪贴板              ║
+                                 ╚══════════════════════╝ -->
+                            <Border Style="{StaticResource SectionCardStyle}">
+                                <StackPanel>
+
+                                    <!-- Card header -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                                        <Border Style="{StaticResource CardIconBoxStyle}" Margin="0,0,12,0">
+                                            <Viewbox Style="{StaticResource CardIconViewboxStyle}">
+                                                <Canvas Width="14" Height="14">
+                                                    <Path Style="{StaticResource CardIconPathStyle}"
+                                                          Data="M4,1.5 H10 A1.5,1.5 0 0 1 11.5,3 V11 A1.5,1.5 0 0 1 10,12.5 H4 A1.5,1.5 0 0 1 2.5,11 V3 A1.5,1.5 0 0 1 4,1.5 Z
+                                                                 M5,0.5 H9
+                                                                 M4.5,4.5 H9.5
+                                                                 M4.5,7 H8.5
+                                                                 M4.5,9.5 H7.5"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="剪贴板"/>
+                                            <TextBlock Style="{StaticResource CardDescStyle}"  Text="最近复制结果、失败原因与重试入口"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <TextBlock x:Name="ClipboardEmptyState"
+                                               FontSize="13"
+                                               Foreground="{StaticResource SubtleTextBrush}"
+                                               Text="还没有剪贴板记录。"/>
+                                    <StackPanel x:Name="ClipboardEntriesHost"/>
+
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ╔══════════════════════╗
+                                 ║  最近输出            ║
+                                 ╚══════════════════════╝ -->
+                            <Border Style="{StaticResource SectionCardStyle}">
+                                <StackPanel>
+
+                                    <!-- Card header -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                                        <Border Style="{StaticResource CardIconBoxStyle}" Margin="0,0,12,0">
+                                            <Viewbox Style="{StaticResource CardIconViewboxStyle}">
+                                                <Canvas Width="14" Height="14">
+                                                    <Path Style="{StaticResource CardIconPathStyle}"
+                                                          Data="M1.5,0.5 H11 A1.5,1.5 0 0 1 12.5,2 V12 A1.5,1.5 0 0 1 11,13.5 H1.5 A1.5,1.5 0 0 1 0,12 V2 A1.5,1.5 0 0 1 1.5,0.5 Z
+                                                                 M3,4.5 H11
+                                                                 M3,7.5 H8.5
+                                                                 M3,10.5 H6.5"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="最近输出"/>
+                                            <TextBlock Style="{StaticResource CardDescStyle}"  Text="最近几次截图、录制与回录"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <TextBlock x:Name="RecentOutputsEmptyState"
+                                               FontSize="13"
+                                               Foreground="{StaticResource SubtleTextBrush}"
+                                               Text="还没有输出记录。"/>
+                                    <StackPanel x:Name="RecentOutputsHost"/>
+
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ╔══════════════════════╗
+                                 ║  常规                ║
+                                 ╚══════════════════════╝ -->
+                            <Border Style="{StaticResource SectionCardStyle}" Margin="0,0,0,0">
+                                <StackPanel>
+
+                                    <!-- Card header -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                                        <Border Style="{StaticResource CardIconBoxStyle}" Margin="0,0,12,0">
+                                            <Viewbox Style="{StaticResource CardIconViewboxStyle}">
+                                                <Canvas Width="14" Height="14">
+                                                    <Path Style="{StaticResource CardIconPathStyle}"
+                                                          Data="M7,4.8 A2.2,2.2 0 1 1 7,9.2 A2.2,2.2 0 0 1 7,4.8 Z
+                                                                 M7,0 L8.2,2.8 L11,2.2 L12.2,5 L10,7 L11,9.8 L8.8,11 L7,9 L5.2,11 L3,9.8 L4,7 L1.8,5 L3,2.2 L5.8,2.8 Z"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="常规"/>
+                                            <TextBlock Style="{StaticResource CardDescStyle}"  Text="低频偏好项"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- 开机自启动 -->
+                                    <controls:SettingRowControl x:Name="LaunchAtStartupRow"
+                                                                Title="开机自启动"
+                                                                Description="登录后自动运行">
+                                        <controls:SettingRowControl.RightContent>
+                                            <CheckBox Style="{StaticResource ToggleSwitchStyle}"
+                                                      Checked="LaunchAtStartupToggle_OnChanged"
+                                                      Unchecked="LaunchAtStartupToggle_OnChanged"
+                                                      IsChecked="False"/>
+                                        </controls:SettingRowControl.RightContent>
+                                    </controls:SettingRowControl>
+
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
+                    </Grid>
+
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- ═══════════════════════════════════════════
+             FLOATING TOP BAR
+             ═══════════════════════════════════════════ -->
+        <Border HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,16,0,0"
+                Padding="16,9"
+                Background="#FFFFFF"
+                BorderBrush="{StaticResource HairlineBrush}"
+                BorderThickness="0.5"
+                CornerRadius="{StaticResource RadiusLarge}"
+                Panel.ZIndex="5">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="18" ShadowDepth="2" Direction="270"
+                                  Color="#0F172A" Opacity="0.09"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Margin="0,0,10,0"
+                           VerticalAlignment="Center"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource HeadingBrush}"
+                           Text="LensSnap"/>
+                <Border Background="{StaticResource PrimaryChipBrush}"
+                        CornerRadius="{StaticResource RadiusSmall}"
+                        Padding="7,3"
+                        Margin="0,0,10,0">
+                    <TextBlock FontSize="9"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryBrush}"
+                               Text="LOCAL"/>
+                </Border>
+                <TextBlock VerticalAlignment="Center"
+                           FontSize="11"
+                           Foreground="{StaticResource SubtleTextBrush}"
+                           Text="Screen capture workspace"/>
+            </StackPanel>
+        </Border>
+
+    </Grid>
+</Window>

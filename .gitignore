@@ -1,0 +1,30 @@
+# Build output
+**/bin/
+**/obj/
+
+# Visual Studio and user-specific files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDEs and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local packages, archives, logs, and temporary captures
+*.zip
+*.7z
+*.log
+*.tmp
+*.userprefs
+captures/
+recordings/
+replays/
+
+# Local ffmpeg binary (install it separately)
+ffmpeg.exe
+

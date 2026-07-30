@@ -1,0 +1,102 @@
+<Window x:Class="ScreenTools.ScreenshotActionToastWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Screenshot Actions"
+        Width="452"
+        Height="188"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True">
+    <Border Background="#F4FFFFFF"
+            BorderBrush="#1F005EB1"
+            BorderThickness="1"
+            CornerRadius="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24"
+                              ShadowDepth="6"
+                              Direction="270"
+                              Color="#220F172A"
+                              Opacity="0.9" />
+        </Border.Effect>
+
+        <Grid Margin="16,14,16,14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="84" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Width="72"
+                    Height="72"
+                    Margin="0,0,14,0"
+                    CornerRadius="10"
+                    BorderBrush="#14000000"
+                    BorderThickness="1"
+                    ClipToBounds="True">
+                <Image x:Name="PreviewImage"
+                       Stretch="UniformToFill" />
+            </Border>
+
+            <StackPanel Grid.Column="1">
+                <TextBlock FontSize="13"
+                           FontWeight="SemiBold"
+                           Foreground="#FF2D3435"
+                           Text="截图已保存" />
+                <TextBlock x:Name="PathText"
+                           Margin="0,4,0,0"
+                           FontSize="12"
+                           Foreground="#FF5F6B7A"
+                           TextTrimming="CharacterEllipsis"
+                           Text="path" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="1"
+                        Grid.Column="1"
+                        Margin="0,14,0,0"
+                        Orientation="Horizontal">
+                <Button MinWidth="92"
+                        Margin="0,0,8,0"
+                        Padding="12,6"
+                        Click="PinButton_Click"
+                        Content="贴到屏幕" />
+                <Button MinWidth="72"
+                        Margin="0,0,8,0"
+                        Padding="12,6"
+                        Click="OpenButton_Click"
+                        Content="打开" />
+                <Button MinWidth="72"
+                        Padding="12,6"
+                        Click="RevealButton_Click"
+                        Content="定位" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="2"
+                        Grid.Column="1"
+                        Margin="0,12,0,0"
+                        Orientation="Horizontal">
+                <TextBlock VerticalAlignment="Center"
+                           Margin="0,0,8,0"
+                           FontSize="11"
+                           Foreground="#FF5F6B7A"
+                           Text="默认:" />
+                <Button MinWidth="88"
+                        Margin="0,0,8,0"
+                        Padding="10,5"
+                        Click="DefaultSaveOnlyButton_Click"
+                        Content="以后只保存" />
+                <Button MinWidth="108"
+                        Padding="10,5"
+                        Click="DefaultPinButton_Click"
+                        Content="以后默认贴图" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

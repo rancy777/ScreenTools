@@ -1,0 +1,424 @@
+<Window x:Class="ScreenTools.RecordingHudWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Recording HUD"
+        Width="1024"
+        Height="820"
+        MinWidth="1024"
+        MinHeight="820"
+        Background="Transparent"
+        AllowsTransparency="True"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style x:Key="GlassBorderStyle" TargetType="Border" BasedOn="{StaticResource FloatingGlassBorderStyle}" />
+
+        <Style x:Key="MetaChipStyle" TargetType="Border">
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Background" Value="{StaticResource ChipBrush}" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSmall}" />
+        </Style>
+
+        <Style x:Key="ValueChipStyle" TargetType="Border" BasedOn="{StaticResource SecondaryPillStyle}">
+            <Setter Property="Padding" Value="12,8" />
+        </Style>
+
+        <Style x:Key="HudIconButtonStyle" TargetType="Border">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSmall}" />
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+
+        <Style x:Key="SettingRowPanelStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusMedium}" />
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+
+        <Style x:Key="HudToggleStyle" TargetType="CheckBox" BasedOn="{StaticResource BareToggleBaseStyle}">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Width="{TemplateBinding Width}" Height="{TemplateBinding Height}">
+                            <Border x:Name="Track"
+                                    Background="{StaticResource TrackOffSoftBrush}"
+                                    CornerRadius="12" />
+                            <Border x:Name="Thumb"
+                                    Width="20"
+                                    Height="20"
+                                    Margin="2,2,0,2"
+                                    HorizontalAlignment="Left"
+                                    Background="{StaticResource KeycapInnerBrush}"
+                                    BorderBrush="{StaticResource ToggleThumbBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="6"
+                                                      ShadowDepth="1"
+                                                      Direction="270"
+                                                      Color="#140F172A"
+                                                      Opacity="0.85" />
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#CBD1D2" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{StaticResource PrimaryBrush}" />
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,2,2,2" />
+                                <Setter TargetName="Thumb" Property="BorderBrush" Value="#EAF3FB" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="92" />
+            <RowDefinition Height="96" />
+            <RowDefinition Height="20" />
+            <RowDefinition Height="336" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,16,0,0"
+                Padding="24,12"
+                CornerRadius="14"
+                Style="{StaticResource GlassBorderStyle}">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock VerticalAlignment="Center"
+                               FontFamily="{StaticResource LatinUiFontFamily}"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               Foreground="#0F172A"
+                               Text="LensSnap" />
+                    <Border Margin="14,0,10,0"
+                            Style="{StaticResource MetaChipStyle}">
+                        <TextBlock FontFamily="{StaticResource LatinUiFontFamily}"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   Text="RECORD" />
+                    </Border>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="13"
+                               Foreground="{StaticResource SubtleTextBrush}"
+                               Text="准备开始录制" />
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="18,0,0,0">
+                    <Border Style="{StaticResource HudIconButtonStyle}"
+                            Margin="0,0,8,0"
+                            Cursor="Hand"
+                            MouseLeftButtonUp="BackToSettings_Click">
+                        <Viewbox Width="15" Height="15" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Canvas Width="15" Height="15">
+                                <Path Fill="{StaticResource SlateBrush}"
+                                      Data="M7.5,15C5.58,15 3.91,14.36 2.49,13.09C1.07,11.82 0.25,10.24 0.04,8.33H1.75C1.94,9.78 2.59,10.97 3.68,11.92C4.77,12.86 6.04,13.33 7.5,13.33C9.13,13.33 10.5,12.77 11.64,11.64C12.77,10.5 13.33,9.13 13.33,7.5C13.33,5.88 12.77,4.5 11.64,3.36C10.5,2.23 9.13,1.67 7.5,1.67C6.54,1.67 5.65,1.89 4.81,2.33C3.98,2.78 3.28,3.39 2.71,4.17H5V5.83H0V0.83H1.67V2.79C2.38,1.9 3.24,1.22 4.26,0.73C5.28,0.24 6.36,0 7.5,0C8.54,0 9.52,0.2 10.43,0.59C11.34,0.99 12.13,1.52 12.8,2.2C13.48,2.87 14.01,3.66 14.41,4.57C14.8,5.48 15,6.46 15,7.5C15,8.54 14.8,9.52 14.41,10.43C14.01,11.34 13.48,12.13 12.8,12.8C12.13,13.48 11.34,14.01 10.43,14.41C9.52,14.8 8.54,15 7.5,15Z" />
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+                    <Border Style="{StaticResource HudIconButtonStyle}"
+                            Cursor="Hand"
+                            MouseLeftButtonUp="BackToSettings_Click">
+                        <Viewbox Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Canvas Width="12" Height="12">
+                                <Path Stroke="{StaticResource SlateBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M1 1 L11 11 M11 1 L1 11" />
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="1"
+                Width="596"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,14,0,0"
+                Padding="8"
+                CornerRadius="14"
+                Style="{StaticResource GlassBorderStyle}">
+            <DockPanel LastChildFill="False">
+                <Border DockPanel.Dock="Left"
+                        Background="#55F7F7F9"
+                        CornerRadius="8"
+                        Padding="6">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Padding="16,10" Background="Transparent" CornerRadius="6">
+                            <StackPanel Orientation="Horizontal">
+                                <Viewbox Width="11.667" Height="17.5" Margin="0,0,10,0">
+                                    <Canvas Width="11.667" Height="17.5">
+                                        <Path Fill="{StaticResource TextBrush}"
+                                              Data="M1.5,0.5H9.9V17H1.5Z M2.6,1.6V15.9H8.8V1.6Z M4.3,5.6H7V3.3H8V6.6H4.3Z M7,11H5.3V13.3H3V14.3H7Z" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock VerticalAlignment="Center"
+                                           FontSize="14"
+                                           Foreground="{StaticResource TextBrush}"
+                                           Text="截图" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="16,10"
+                                Background="#DCEBFA"
+                                CornerRadius="6"
+                                Margin="4,0,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Viewbox Width="15.433" Height="12.5" Margin="0,0,10,0">
+                                    <Canvas Width="15.433" Height="12.5">
+                                        <Path Fill="{StaticResource PrimaryBrush}"
+                                              Data="M1.3,0H11.2C11.9,0 12.5,0.6 12.5,1.3V4.6L15.43,1.67V10.83L12.5,7.9V11.2C12.5,11.9 11.9,12.5 11.2,12.5H1.3C0.58,12.5 0,11.92 0,11.2V1.3C0,0.58 0.58,0 1.3,0Z M1.5,1.5V11H11V1.5Z" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock VerticalAlignment="Center"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrimaryActiveBrush}"
+                                           Text="录制" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="16,10" Margin="4,0,0,0" Background="Transparent" CornerRadius="6">
+                            <StackPanel Orientation="Horizontal">
+                                <Grid Margin="0,0,10,0">
+                                    <Viewbox Width="14.117" Height="14.167">
+                                        <Canvas Width="14.117" Height="14.167">
+                                            <Path Fill="{StaticResource TextBrush}"
+                                                  Data="M7.06,14.17C3.16,14.17 0,11.01 0,7.08H1.6C1.6,10.09 4.05,12.57 7.06,12.57C10.08,12.57 12.52,10.09 12.52,7.08C12.52,4.06 10.08,1.6 7.06,1.6C5.55,1.6 4.18,2.21 3.19,3.2H5.4V4.8H0.6V0H2.2V2.12C3.49,0.83 5.2,0 7.06,0C10.97,0 14.12,3.18 14.12,7.08C14.12,10.98 10.97,14.17 7.06,14.17Z M6.3,3.2H7.9V7.37L10.62,10.08L9.48,11.22L6.3,8.06Z" />
+                                        </Canvas>
+                                    </Viewbox>
+                                    <Border HorizontalAlignment="Right"
+                                            VerticalAlignment="Top"
+                                            Margin="8,-4,0,0"
+                                            Padding="4,0"
+                                            Background="{StaticResource BadgeBrush}"
+                                            CornerRadius="12">
+                                        <TextBlock x:Name="ReplayDurationBadgeText"
+                                                   FontFamily="{StaticResource LatinUiFontFamily}"
+                                                   FontSize="8"
+                                                   FontWeight="Bold"
+                                                   Foreground="White"
+                                                   Text="30s" />
+                                    </Border>
+                                </Grid>
+                                <TextBlock VerticalAlignment="Center"
+                                           FontSize="14"
+                                           Foreground="{StaticResource TextBrush}"
+                                           Text="回录" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0,2,0" VerticalAlignment="Center">
+                    <TextBlock VerticalAlignment="Center"
+                               FontFamily="{StaticResource LatinUiFontFamily}"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource SubtleTextBrush}"
+                               Text="MODE" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="3"
+                Width="436"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,10,0,0"
+                Padding="30,28,30,28"
+                Style="{StaticResource PanelGlassBorderStyle}">
+            <StackPanel>
+                <DockPanel Margin="0,0,0,8">
+                    <TextBlock DockPanel.Dock="Left"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource TextBrush}"
+                               Text="录制设置" />
+                    <Border DockPanel.Dock="Right"
+                            Style="{StaticResource MetaChipStyle}">
+                        <TextBlock FontFamily="{StaticResource LatinUiFontFamily}"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   Text="ACTIVE PROFILE" />
+                    </Border>
+                </DockPanel>
+
+                <TextBlock Margin="0,0,0,22"
+                           FontSize="14"
+                           Foreground="{StaticResource SubtleTextBrush}"
+                           Text="只保留开始前的必要控制。" />
+
+                <Border x:Name="HudStatusBanner"
+                        Margin="0,0,0,18"
+                        Padding="12,10"
+                        Background="#FFF6F7F8"
+                        BorderBrush="{StaticResource HairlineBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusMedium}">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="HudStatusIndicator"
+                                 Width="8"
+                                 Height="8"
+                                 Margin="0,4,10,0"
+                                 Fill="{StaticResource PrimaryBrush}" />
+                        <StackPanel>
+                            <TextBlock x:Name="HudStatusMessageText"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource HeadingBrush}"
+                                       Text="就绪" />
+                            <TextBlock x:Name="HudStatusMetaText"
+                                       Margin="0,3,0,0"
+                                       FontSize="12"
+                                       Foreground="{StaticResource SubtleTextBrush}"
+                                       Text="等待开始录制。" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SettingRowPanelStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Viewbox Width="10.833" Height="15.208" Margin="0,0,12,0">
+                                    <Canvas Width="10.833" Height="15.208">
+                                        <Path Fill="{StaticResource SubtleTextBrush}"
+                                              Data="M5.42,10.42C6.94,10.42 8.17,9.18 8.17,7.67V2.75C8.17,1.23 6.94,0 5.42,0C3.9,0 2.67,1.23 2.67,2.75V7.67C2.67,9.18 3.9,10.42 5.42,10.42Z M1.25,6.88H2.5C2.5,8.52 3.78,9.88 5.42,9.88C7.05,9.88 8.33,8.52 8.33,6.88H9.58C9.58,8.97 8.06,10.71 6.04,11.02V13.54H4.79V11.02C2.77,10.71 1.25,8.97 1.25,6.88Z" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock FontSize="16" Foreground="{StaticResource TextBrush}" Text="录制麦克风" />
+                            </StackPanel>
+                            <TextBlock Margin="23,6,0,0"
+                                       FontSize="13"
+                                       Foreground="{StaticResource SubtleTextBrush}"
+                                       Text="保留旁白输入" />
+                        </StackPanel>
+                        <CheckBox Grid.Column="1"
+                                  x:Name="HudMicrophoneToggle"
+                                  Style="{StaticResource HudToggleStyle}"
+                                  Checked="HudMicrophoneToggle_OnChanged"
+                                  Unchecked="HudMicrophoneToggle_OnChanged"
+                                  IsChecked="True"
+                                  Margin="0,4,1,0" />
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingRowPanelStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Viewbox Width="13.91" Height="13.558" Margin="0,0,12,0">
+                                    <Canvas Width="13.91" Height="13.558">
+                                        <Path Fill="{StaticResource SubtleTextBrush}"
+                                              Data="M4.4,4.1C4.4,3 5.3,2.1 6.4,2.1C7.5,2.1 8.4,3 8.4,4.1C8.4,5.2 7.5,6.1 6.4,6.1C5.3,6.1 4.4,5.2 4.4,4.1Z M0,5H1.6C1.6,2.2 3.8,0 6.6,0C9.4,0 11.6,2.2 11.6,5H13.2C13.2,1.3 10.3,0 6.6,0C2.9,0 0,1.3 0,5Z M1.6,8.4H3.2V13.56H1.6Z M10.7,8.4H12.3V13.56H10.7Z M4.1,7.5H9.1V9.1H4.1Z" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock FontSize="16" Foreground="{StaticResource TextBrush}" Text="系统声音" />
+                            </StackPanel>
+                            <TextBlock Margin="26,6,0,0"
+                                       FontSize="13"
+                                       Foreground="{StaticResource SubtleTextBrush}"
+                                       Text="同步系统音频" />
+                        </StackPanel>
+                        <CheckBox Grid.Column="1"
+                                  x:Name="HudSystemAudioToggle"
+                                  Style="{StaticResource HudToggleStyle}"
+                                  Checked="HudSystemAudioToggle_OnChanged"
+                                  Unchecked="HudSystemAudioToggle_OnChanged"
+                                  IsChecked="True"
+                                  Margin="0,4,1,0" />
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingRowPanelStyle}" Margin="0,0,0,22">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Viewbox Width="15.833" Height="12.5" Margin="0,0,12,0">
+                                    <Canvas Width="15.833" Height="12.5">
+                                        <Path Fill="{StaticResource SubtleTextBrush}"
+                                              Data="M0,1H15.83V11.5H0Z M1.3,2.2V10.3H14.5V2.2Z M3,4H6V8.5H3Z M7.4,4H12.8V5.2H7.4Z M7.4,7.1H12.8V8.3H7.4Z" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock FontSize="16" Foreground="{StaticResource TextBrush}" Text="画质" />
+                            </StackPanel>
+                            <TextBlock Margin="28,6,0,0"
+                                       FontSize="13"
+                                       Foreground="{StaticResource SubtleTextBrush}"
+                                       Text="默认录制档位" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1"
+                                  x:Name="HudQualityPresetComboBox"
+                                  Width="160"
+                                  Margin="10,0,0,0"
+                                  Style="{StaticResource SettingsComboBoxStyle}"
+                                  SelectionChanged="HudQualityPresetComboBox_SelectionChanged"
+                                  SelectedIndex="1">
+                            <ComboBoxItem Content="720P 30FPS" />
+                            <ComboBoxItem Content="1080P 60FPS" />
+                            <ComboBoxItem Content="1440P 30FPS" />
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <Border Background="{StaticResource PrimaryBrush}"
+                        Margin="0,2,0,0"
+                        Style="{StaticResource PrimaryActionButtonStyle}"
+                        Cursor="Hand"
+                        MouseLeftButtonUp="StartRecording_Click">
+                    <Grid Height="56">
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <Ellipse Width="10"
+                                     Height="10"
+                                     Fill="#F6F7FF"
+                                     Margin="0,0,8,0" />
+                            <TextBlock FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="#F6F7FF"
+                                       Text="开始录制" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

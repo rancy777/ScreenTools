@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible ScreenTools problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: ScreenTools is incomplete. Detailed environment and reproduction information is especially important.
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Capture environment
+      description: Displays, DPI scaling, GPU, microphone/audio devices, and ffmpeg version where relevant.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or sample output
+      description: Remove private information before uploading.
+

@@ -1,0 +1,45 @@
+<UserControl x:Class="ScreenTools.Controls.ToolbarItemControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             x:Name="Root"
+             mc:Ignorable="d"
+             d:DesignHeight="64"
+             d:DesignWidth="64">
+    <UserControl.Resources>
+        <Style x:Key="ToolbarLabelActiveStyle"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource BottomToolLabelStyle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsActive, ElementName=Root}" Value="True">
+                    <Setter Property="Foreground" Value="#2563EB" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Border x:Name="Container"
+            Padding="{Binding ItemPadding, ElementName=Root}"
+            Background="Transparent"
+            CornerRadius="{StaticResource RadiusSmall}">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="Background" Value="Transparent" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsActive, ElementName=Root}" Value="True">
+                        <Setter Property="Background" Value="#EFF6FF" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+        <StackPanel Width="{Binding ItemWidth, ElementName=Root}">
+            <ContentPresenter HorizontalAlignment="Center"
+                              Content="{Binding IconContent, ElementName=Root}" />
+            <TextBlock x:Name="LabelText"
+                       Margin="0,4,0,0"
+                       Style="{StaticResource ToolbarLabelActiveStyle}"
+                       Text="{Binding Label, ElementName=Root}" />
+        </StackPanel>
+    </Border>
+</UserControl>
