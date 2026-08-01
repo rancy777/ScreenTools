@@ -17,6 +17,8 @@ public sealed class SessionPersistenceService
         _settingsPath = Path.Combine(appDataPath, "session-settings.json");
     }
 
+    public event EventHandler<SessionCorruptedException>? SessionCorrupted;
+
     public RecordingSessionState Load()
     {
         if (!File.Exists(_settingsPath))
@@ -53,8 +55,9 @@ public sealed class SessionPersistenceService
                 ReplayShortcut = persisted.ReplayShortcut?.Clone() ?? ShortcutGesture.CreateDefault(ShortcutAction.Replay)
             };
         }
-        catch
+        catch (JsonException ex)
         {
+            SessionCorrupted?.Invoke(this, new SessionCorruptedException(ex));
             return new RecordingSessionState();
         }
     }
@@ -79,9 +82,16 @@ public sealed class SessionPersistenceService
             ReplayShortcut = session.ReplayShortcut.Clone()
         };
 
-        File.WriteAllText(
-            _settingsPath,
-            JsonSerializer.Serialize(persisted, new JsonSerializerOptions { WriteIndented = true }));
+        try
+        {
+            File.WriteAllText(
+                _settingsPath,
+                JsonSerializer.Serialize(persisted, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch
+        {
+            // Persisting settings is best-effort; do not throw from a side-effect-only save path.
+        }
     }
 
     private sealed class PersistedSessionState
@@ -101,4 +111,6 @@ public sealed class SessionPersistenceService
         public ShortcutGesture? RecordingShortcut { get; set; }
         public ShortcutGesture? ReplayShortcut { get; set; }
     }
+
+    public sealed record SessionCorruptedException(Exception Exception);
 }

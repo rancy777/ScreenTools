@@ -8,10 +8,18 @@ namespace ScreenTools;
 
 public partial class ScreenshotActionToastWindow : Window
 {
+    private static ScreenshotActionToastWindow? _currentToast;
     private readonly DispatcherTimer _closeTimer;
 
     public ScreenshotActionToastWindow(string screenshotPath, Point position)
     {
+        if (_currentToast is not null && _currentToast.IsVisible)
+        {
+            _currentToast.Close();
+        }
+
+        _currentToast = this;
+
         InitializeComponent();
         Left = position.X;
         Top = position.Y;
@@ -27,6 +35,7 @@ public partial class ScreenshotActionToastWindow : Window
         Activated += (_, _) => RestartTimer();
         MouseEnter += (_, _) => _closeTimer.Stop();
         MouseLeave += (_, _) => RestartTimer();
+        Closed += (_, _) => _currentToast = null;
     }
 
     public string ScreenshotPath { get; }

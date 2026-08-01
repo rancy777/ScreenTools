@@ -18,6 +18,8 @@ public sealed class ReplayBufferService
     private readonly LinkedList<ReplayFrameSnapshot> _frames = [];
     private long _bufferedBytes;
 
+    public event EventHandler<FrameCaptureFailedEventArgs>? FrameCaptureFailed;
+
     public ReplayBufferService(
         ScreenCaptureService screenCaptureService,
         FrameSequenceEncoder frameSequenceEncoder,
@@ -177,12 +179,24 @@ public sealed class ReplayBufferService
             return;
         }
 
-        var jpegBytes = _screenCaptureService.CaptureFrameJpegBytes(_session.QualityPreset);
-        lock (_sync)
+        try
         {
-            _frames.AddLast(new ReplayFrameSnapshot(DateTimeOffset.Now, jpegBytes));
-            _bufferedBytes += jpegBytes.LongLength;
-            TrimFrames();
+            var jpegBytes = _screenCaptureService.CaptureFrameJpegBytes(_session.QualityPreset);
+            if (jpegBytes.Length == 0)
+            {
+                return;
+            }
+
+            lock (_sync)
+            {
+                _frames.AddLast(new ReplayFrameSnapshot(DateTimeOffset.Now, jpegBytes));
+                _bufferedBytes += jpegBytes.LongLength;
+                TrimFrames();
+            }
+        }
+        catch (Exception ex)
+        {
+            FrameCaptureFailed?.Invoke(this, new FrameCaptureFailedEventArgs(ex));
         }
     }
 
@@ -234,6 +248,8 @@ public sealed class ReplayBufferService
         string QualityPreset,
         int TargetFrameRate,
         IReadOnlyList<ReplayFrameSnapshot> Frames);
+
+    public sealed record FrameCaptureFailedEventArgs(Exception Exception);
 
     private sealed record ReplayArtifactManifest(
         string Format,

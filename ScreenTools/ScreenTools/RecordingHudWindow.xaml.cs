@@ -31,7 +31,7 @@ public partial class RecordingHudWindow : Window
 
     private void ApplySessionState()
     {
-        if (_session is null)
+        if (_session is null || !IsVisible)
         {
             return;
         }
@@ -53,7 +53,7 @@ public partial class RecordingHudWindow : Window
 
     private void RenderStatus()
     {
-        if (_statusService is null)
+        if (_statusService is null || !IsVisible)
         {
             return;
         }

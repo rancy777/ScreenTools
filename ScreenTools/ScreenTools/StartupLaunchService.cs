@@ -10,22 +10,36 @@ public sealed class StartupLaunchService
 
     public bool IsEnabled()
     {
-        using var runKey = Registry.CurrentUser.OpenSubKey(RegistryRunPath, writable: false);
-        return runKey?.GetValue(AppName) is string value && !string.IsNullOrWhiteSpace(value);
+        try
+        {
+            using var runKey = Registry.CurrentUser.OpenSubKey(RegistryRunPath, writable: false);
+            return runKey?.GetValue(AppName) is string value && !string.IsNullOrWhiteSpace(value);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public void SetEnabled(bool enabled)
     {
-        using var runKey = Registry.CurrentUser.OpenSubKey(RegistryRunPath, writable: true)
-            ?? Registry.CurrentUser.CreateSubKey(RegistryRunPath);
-
-        if (enabled)
+        try
         {
-            var executablePath = Environment.ProcessPath ?? throw new InvalidOperationException("找不到应用程序路径。");
-            runKey.SetValue(AppName, $"\"{executablePath}\"");
-            return;
-        }
+            using var runKey = Registry.CurrentUser.OpenSubKey(RegistryRunPath, writable: true)
+                ?? Registry.CurrentUser.CreateSubKey(RegistryRunPath);
 
-        runKey.DeleteValue(AppName, throwOnMissingValue: false);
+            if (enabled)
+            {
+                var executablePath = Environment.ProcessPath ?? throw new InvalidOperationException("找不到应用程序路径。");
+                runKey.SetValue(AppName, $"\"{executablePath}\"");
+                return;
+            }
+
+            runKey.DeleteValue(AppName, throwOnMissingValue: false);
+        }
+        catch
+        {
+            // Startup registry access is best-effort; do not crash the application if the registry is inaccessible.
+        }
     }
 }

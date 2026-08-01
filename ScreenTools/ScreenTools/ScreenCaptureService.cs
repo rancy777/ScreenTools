@@ -8,45 +8,102 @@ using Forms = System.Windows.Forms;
 
 namespace ScreenTools;
 
-public sealed class ScreenCaptureService
+public sealed class ScreenCaptureService : IScreenCaptureService
 {
     public CaptureArtifact CaptureScreenshot(RecordingSessionState session)
     {
+        if (session is null)
+        {
+            throw new ArgumentNullException(nameof(session));
+        }
+
         var extension = NormalizeImageExtension(session.ScreenshotFormat);
         var outputPath = CaptureOutputPathHelper.CreateScreenshotPath(session.OutputDirectory, extension);
 
-        using var bitmap = CaptureVirtualScreen();
-        SaveBitmap(bitmap, outputPath, extension);
-        return new CaptureArtifact("截图", outputPath, 1, CaptureBounds: new Rect(0, 0, bitmap.Width, bitmap.Height));
+        try
+        {
+            using var bitmap = CaptureVirtualScreen();
+            SaveBitmap(bitmap, outputPath, extension);
+            return new CaptureArtifact("截图", outputPath, 1, CaptureBounds: new Rect(0, 0, bitmap.Width, bitmap.Height));
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"截图失败：无法捕获屏幕画面。{ex.Message}", ex);
+        }
     }
 
     public CaptureArtifact CaptureScreenshotRegion(RecordingSessionState session, Rect region)
     {
+        if (session is null)
+        {
+            throw new ArgumentNullException(nameof(session));
+        }
+
         var extension = NormalizeImageExtension(session.ScreenshotFormat);
         var outputPath = CaptureOutputPathHelper.CreateScreenshotPath(session.OutputDirectory, extension);
-        using var bitmap = CaptureRegion(region);
-        SaveBitmap(bitmap, outputPath, extension);
-        return new CaptureArtifact("截图", outputPath, 1, CaptureBounds: region);
+
+        try
+        {
+            using var bitmap = CaptureRegion(region);
+            SaveBitmap(bitmap, outputPath, extension);
+            return new CaptureArtifact("截图", outputPath, 1, CaptureBounds: region);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"区域截图失败：无法捕获屏幕区域。{ex.Message}", ex);
+        }
     }
 
     public void CaptureFrameJpeg(string outputPath, string qualityPreset)
     {
-        File.WriteAllBytes(outputPath, CaptureFrameJpegBytes(qualityPreset));
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            throw new ArgumentException("输出路径不能为空。", nameof(outputPath));
+        }
+
+        try
+        {
+            File.WriteAllBytes(outputPath, CaptureFrameJpegBytes(qualityPreset));
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"录制帧采集失败：无法写入 {outputPath}。{ex.Message}", ex);
+        }
     }
 
     public byte[] CaptureFrameJpegBytes(string qualityPreset)
     {
-        var profile = CaptureQualityProfile.FromPreset(qualityPreset);
-        using var bitmap = CaptureVirtualScreen();
-        using var scaledBitmap = ResizeBitmap(bitmap, profile.MaxWidth);
-        using var stream = new MemoryStream();
-        SaveJpeg(scaledBitmap, stream, profile.JpegQuality);
-        return stream.ToArray();
+        if (string.IsNullOrWhiteSpace(qualityPreset))
+        {
+            throw new ArgumentException("质量档位不能为空。", nameof(qualityPreset));
+        }
+
+        try
+        {
+            var profile = CaptureQualityProfile.FromPreset(qualityPreset);
+            using var bitmap = CaptureVirtualScreen();
+            using var scaledBitmap = ResizeBitmap(bitmap, profile.MaxWidth);
+            using var stream = new MemoryStream();
+            SaveJpeg(scaledBitmap, stream, profile.JpegQuality);
+            return stream.ToArray();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"录制帧采集失败：无法捕获或编码画面。{ex.Message}", ex);
+        }
     }
+
+    private const long MaxCaptureMemoryBytes = 500L * 1024 * 1024; // 500 MB
 
     private static Drawing.Bitmap CaptureVirtualScreen()
     {
         var screenBounds = Forms.SystemInformation.VirtualScreen;
+        var estimatedMemory = (long)screenBounds.Width * screenBounds.Height * 4; // BGRA
+        if (estimatedMemory > MaxCaptureMemoryBytes)
+        {
+            throw new InvalidOperationException($"屏幕分辨率过高（{screenBounds.Width}x{screenBounds.Height}，预计占用 {estimatedMemory / (1024 * 1024)} MB），超过内存预算 {MaxCaptureMemoryBytes / (1024 * 1024)} MB。请降低显示缩放或选择区域截图。");
+        }
+
         return CaptureScreenArea(screenBounds.Left, screenBounds.Top, screenBounds.Width, screenBounds.Height);
     }
 

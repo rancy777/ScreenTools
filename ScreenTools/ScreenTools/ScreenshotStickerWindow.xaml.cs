@@ -33,16 +33,26 @@ public partial class ScreenshotStickerWindow : Window
     {
         if (!File.Exists(imagePath))
         {
-            throw new FileNotFoundException("未找到截图文件。", imagePath);
+            MessageBox.Show("未找到截图文件，可能已被移动或删除。", "LensSnap", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Close();
+            return;
         }
 
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.UriSource = new Uri(imagePath, UriKind.Absolute);
-        bitmap.EndInit();
-        bitmap.Freeze();
-        PreviewImage.Source = bitmap;
+        try
+        {
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.UriSource = new Uri(imagePath, UriKind.Absolute);
+            bitmap.EndInit();
+            bitmap.Freeze();
+            PreviewImage.Source = bitmap;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"图片加载失败：{ex.Message}", "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
+            Close();
+        }
     }
 
     private void Root_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
