@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Recording HUD"
+        Title="录制控制面板"
         Width="1024"
         Height="820"
         MinWidth="1024"
@@ -120,7 +120,7 @@
                                    FontSize="10"
                                    FontWeight="SemiBold"
                                    Foreground="{StaticResource PrimaryBrush}"
-                                   Text="RECORD" />
+                                   Text="录制标记" />
                     </Border>
                     <TextBlock VerticalAlignment="Center"
                                FontSize="13"
@@ -239,7 +239,7 @@
                                FontSize="10"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource SubtleTextBrush}"
-                               Text="MODE" />
+                               Text="模式" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -264,7 +264,7 @@
                                    FontSize="10"
                                    FontWeight="SemiBold"
                                    Foreground="{StaticResource PrimaryBrush}"
-                                   Text="ACTIVE PROFILE" />
+                                   Text="当前配置" />
                     </Border>
                 </DockPanel>
 

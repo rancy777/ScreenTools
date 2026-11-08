@@ -1,6 +1,7 @@
 # Build output
 **/bin/
 **/obj/
+**/*_wpftmp.csproj
 
 # Visual Studio and user-specific files
 .vs/
@@ -20,6 +21,8 @@ Thumbs.db
 *.7z
 *.log
 *.tmp
+BenchmarkResults/
+*.bench.csv
 *.userprefs
 captures/
 recordings/

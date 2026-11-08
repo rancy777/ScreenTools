@@ -7,20 +7,22 @@
              mc:Ignorable="d"
              d:DesignHeight="56"
              d:DesignWidth="720">
-    <Grid>
+    <Grid x:Name="RowLayout" SizeChanged="RowLayout_SizeChanged">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Column="0">
+        <StackPanel x:Name="TextContent" Grid.Column="0" MinWidth="0">
             <TextBlock Style="{StaticResource BodyTitleTextStyle}"
-                       Text="{Binding Title, ElementName=Root}" />
+                       Text="{Binding Title, ElementName=Root}"
+                       TextWrapping="Wrap" />
             <TextBlock Style="{StaticResource BodyDescriptionTextStyle}"
-                       Text="{Binding Description, ElementName=Root}" />
+                       Text="{Binding Description, ElementName=Root}"
+                       TextWrapping="Wrap" />
         </StackPanel>
 
-        <ContentPresenter Grid.Column="1"
+        <ContentPresenter x:Name="RightContentPresenter" Grid.Column="1"
                           VerticalAlignment="Center"
                           Margin="{Binding RightContentMargin, ElementName=Root}"
                           Content="{Binding RightContent, ElementName=Root}" />

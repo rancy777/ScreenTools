@@ -10,6 +10,13 @@
     </security>
   </trustInfo>
 
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">
+      <dpiAware>true/pm</dpiAware>
+      <dpiAwareness>PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
       <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
@@ -19,11 +26,4 @@
       <supportedOS Id="{a4c1e69e-9561-48a5-a673-641f321c7be5}" />
     </application>
   </compatibility>
-
-  <application xmlns="urn:schemas-microsoft-com:asm.v3">
-    <windowsSettings>
-      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">permonitorv2</dpiAwareness>
-      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAwareness>
-    </windowsSettings>
-  </application>
 </assembly>

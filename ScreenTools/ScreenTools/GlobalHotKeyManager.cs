@@ -8,6 +8,9 @@ using System.Windows.Input;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Registers and manages application-wide keyboard shortcuts and low-level input hooks.
+/// </summary>
 public sealed class GlobalHotKeyManager : IDisposable
 {
     private const int WhKeyboardLl = 13;
@@ -37,6 +40,9 @@ public sealed class GlobalHotKeyManager : IDisposable
     private IntPtr _mouseHook;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes global shortcut hooks for the supplied window and session settings.
+    /// </summary>
     public GlobalHotKeyManager(Window window, RecordingSessionState session)
     {
         _window = window;
@@ -47,12 +53,27 @@ public sealed class GlobalHotKeyManager : IDisposable
         _window.Closed += (_, _) => Dispose();
     }
 
+    /// <summary>
+    /// Raised when a configured global shortcut is activated.
+    /// </summary>
     public event EventHandler<ShortcutAction>? HotKeyPressed;
+    /// <summary>
+    /// Raised when Windows refuses to install a required low-level input hook.
+    /// </summary>
     public event EventHandler<HookInstallationFailedEventArgs>? HookInstallationFailed;
+    /// <summary>
+    /// Raised when a configured shortcut conflicts with a system-reserved gesture.
+    /// </summary>
     public event EventHandler<ShortcutAction>? HotKeyConflictDetected;
 
+    /// <summary>
+    /// Gets or sets whether global shortcut handling is temporarily suspended.
+    /// </summary>
     public bool IsSuspended { get; set; }
 
+    /// <summary>
+    /// Releases native hooks, event subscriptions, and other resources owned by this component.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -88,6 +109,9 @@ public sealed class GlobalHotKeyManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Describes a failed low-level keyboard or mouse hook installation.
+    /// </summary>
     public sealed record HookInstallationFailedEventArgs(string HookType, int ErrorCode);
 
     private IntPtr KeyboardHookCallback(int code, IntPtr wParam, IntPtr lParam)
@@ -282,27 +306,63 @@ public sealed class GlobalHotKeyManager : IDisposable
     [StructLayout(LayoutKind.Sequential)]
     private struct KbdLlHookStruct
     {
+        /// <summary>
+        /// Contains the virtual-key code reported by the Windows low-level keyboard hook.
+        /// </summary>
         public uint vkCode;
+        /// <summary>
+        /// Contains the hardware scan code reported by the Windows low-level keyboard hook.
+        /// </summary>
         public uint scanCode;
+        /// <summary>
+        /// Contains the native hook flags associated with this input event.
+        /// </summary>
         public uint flags;
+        /// <summary>
+        /// Contains the timestamp supplied by the Windows input hook.
+        /// </summary>
         public uint time;
+        /// <summary>
+        /// Contains the additional application-defined information supplied by the Windows hook.
+        /// </summary>
         public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Point
     {
+        /// <summary>
+        /// Contains the horizontal coordinate in the native Windows hook point structure.
+        /// </summary>
         public int X;
+        /// <summary>
+        /// Contains the vertical coordinate in the native Windows hook point structure.
+        /// </summary>
         public int Y;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MsLlHookStruct
     {
+        /// <summary>
+        /// Contains the desktop coordinates reported by the Windows low-level mouse hook.
+        /// </summary>
         public Point pt;
+        /// <summary>
+        /// Contains mouse-wheel or extended-button data reported by the Windows low-level mouse hook.
+        /// </summary>
         public uint mouseData;
+        /// <summary>
+        /// Contains the native hook flags associated with this input event.
+        /// </summary>
         public uint flags;
+        /// <summary>
+        /// Contains the timestamp supplied by the Windows input hook.
+        /// </summary>
         public uint time;
+        /// <summary>
+        /// Contains the additional application-defined information supplied by the Windows hook.
+        /// </summary>
         public IntPtr dwExtraInfo;
     }
 

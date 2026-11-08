@@ -3,8 +3,14 @@ using System.IO;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Creates and validates the output locations used for captured artifacts.
+/// </summary>
 public static class CaptureOutputPathHelper
 {
+    /// <summary>
+    /// Returns the default directory used for saved captures.
+    /// </summary>
     public static string GetDefaultOutputDirectory()
     {
         var pictures = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
@@ -14,6 +20,9 @@ public static class CaptureOutputPathHelper
         return Path.Combine(fallback, "LensSnap");
     }
 
+    /// <summary>
+    /// Creates or resolves a valid output directory, falling back to the default when needed.
+    /// </summary>
     public static string EnsureOutputDirectory(string? outputDirectory)
     {
         var resolvedPath = string.IsNullOrWhiteSpace(outputDirectory)
@@ -24,6 +33,9 @@ public static class CaptureOutputPathHelper
         return resolvedPath;
     }
 
+    /// <summary>
+    /// Creates a unique file path for a screenshot with the requested extension.
+    /// </summary>
     public static string CreateScreenshotPath(string? outputDirectory, string extension)
     {
         var baseDirectory = EnsureOutputDirectory(outputDirectory);
@@ -32,6 +44,9 @@ public static class CaptureOutputPathHelper
         return Path.Combine(dayDirectory, $"Screenshot-{DateTime.Now:yyyyMMdd-HHmmss}.{extension.ToLowerInvariant()}");
     }
 
+    /// <summary>
+    /// Creates a unique output directory for a recording or replay artifact.
+    /// </summary>
     public static string CreateArtifactDirectory(string? outputDirectory, string category, string prefix)
     {
         var baseDirectory = EnsureOutputDirectory(outputDirectory);

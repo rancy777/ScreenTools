@@ -2,9 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Captures microphone audio to a WAV file and supports pause, resume, and finalization.
+/// </summary>
 public sealed class MicrophoneCaptureService : IAudioCaptureService
 {
     private const int WaveMapper = unchecked((int)0xFFFFFFFF);
@@ -13,43 +17,99 @@ public sealed class MicrophoneCaptureService : IAudioCaptureService
     private readonly object _sync = new();
     private readonly WaveInProc _waveInProc;
     private readonly List<WaveBufferHandle> _buffers = [];
+    private readonly ManualResetEventSlim _stopCompleted = new(true);
     private IntPtr _waveInHandle;
     private FileStream? _outputStream;
     private bool _isRecording;
+    private bool _isPaused;
     private int _dataLength;
+    private int _failureRaised;
+    private int _availableDeviceCount;
+    private int _stopInProgress;
+    private string? _outputPath;
+    private TimeSpan _timelineOffset;
 
+    /// <summary>
+    /// Initializes microphone capture using the default Windows recording endpoint.
+    /// </summary>
     public MicrophoneCaptureService()
     {
         _waveInProc = OnWaveInData;
+        RefreshAvailability();
     }
 
-    public bool IsSupported => true;
+    /// <summary>
+    /// Gets whether the corresponding audio capture source is currently available.
+    /// </summary>
+    public bool IsSupported => _availableDeviceCount > 0;
 
-    public string AvailabilityMessage => "麦克风将使用 Windows 音频采集 API 录制。";
+    /// <inheritdoc />
+    public bool IsCapturing => _waveInHandle != IntPtr.Zero && _isRecording && !_isPaused;
 
+    /// <summary>
+    /// Gets the current user-facing status of the audio capture source.
+    /// </summary>
+    public string AvailabilityMessage => IsSupported
+        ? "麦克风将使用 Windows 音频采集 API 录制。"
+        : "Windows 未检测到可用的麦克风输入设备。";
+
+    /// <inheritdoc />
+    public IReadOnlyList<AudioCaptureSegment> OutputSegments =>
+        !string.IsNullOrWhiteSpace(_outputPath) && File.Exists(_outputPath)
+            ? [new AudioCaptureSegment(_outputPath, _timelineOffset)]
+            : Array.Empty<AudioCaptureSegment>();
+
+    /// <inheritdoc />
+    public event EventHandler<AudioCaptureFailedEventArgs>? CaptureFailed;
+
+    /// <inheritdoc />
+    public void RefreshAvailability()
+    {
+        _availableDeviceCount = checked((int)waveInGetNumDevs());
+    }
+
+    /// <summary>
+    /// Releases native hooks, event subscriptions, and other resources owned by this component.
+    /// </summary>
     public void Dispose()
     {
-        if (_isRecording)
-        {
-            Stop();
-        }
+        Stop();
+        _stopCompleted.Dispose();
     }
 
-    public void Start(string outputPath)
+    /// <summary>
+    /// Starts the requested capture operation when the service is in a state that permits it.
+    /// </summary>
+    public void Start(string outputPath, TimeSpan timelineOffset = default)
     {
+        if (string.IsNullOrWhiteSpace(outputPath))
+            throw new ArgumentException("输出路径不能为空。", nameof(outputPath));
         if (_isRecording)
         {
             throw new InvalidOperationException("麦克风录制已经启动。");
         }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? AppContext.BaseDirectory);
-        _outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+        RefreshAvailability();
+        if (!IsSupported)
+            throw new InvalidOperationException(AvailabilityMessage);
+
+        _outputPath = Path.GetFullPath(outputPath);
+        _timelineOffset = timelineOffset < TimeSpan.Zero ? TimeSpan.Zero : timelineOffset;
+        _isPaused = false;
+        Interlocked.Exchange(ref _failureRaised, 0);
+        Directory.CreateDirectory(Path.GetDirectoryName(_outputPath) ?? AppContext.BaseDirectory);
+        _outputStream = new FileStream(_outputPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
         WriteWaveHeader(_outputStream, 0);
 
         var format = CreateWaveFormat();
         var result = waveInOpen(out _waveInHandle, WaveMapper, ref format, _waveInProc, IntPtr.Zero, CallbackFunction);
         if (result != 0 || _waveInHandle == IntPtr.Zero)
         {
+            if (_waveInHandle != IntPtr.Zero)
+            {
+                waveInClose(_waveInHandle);
+                _waveInHandle = IntPtr.Zero;
+            }
             _outputStream.Dispose();
             _outputStream = null;
             throw new InvalidOperationException($"麦克风设备打开失败，错误码 {result}。");
@@ -58,46 +118,81 @@ public sealed class MicrophoneCaptureService : IAudioCaptureService
         _dataLength = 0;
         _isRecording = true;
 
-        for (var i = 0; i < 3; i++)
+        try
         {
-            var buffer = CreateBuffer(format.nAvgBytesPerSec / 4);
-            _buffers.Add(buffer);
-            PrepareBuffer(buffer);
-            AddBuffer(buffer);
-        }
+            for (var i = 0; i < 3; i++)
+            {
+                var buffer = CreateBuffer(format.nAvgBytesPerSec / 4);
+                _buffers.Add(buffer);
+                PrepareBuffer(buffer);
+                AddBuffer(buffer);
+            }
 
-        var startResult = waveInStart(_waveInHandle);
-        if (startResult != 0)
+            var startResult = waveInStart(_waveInHandle);
+            if (startResult != 0)
+                throw new InvalidOperationException($"麦克风录制启动失败，错误码 {startResult}。");
+        }
+        catch
         {
             Stop();
-            throw new InvalidOperationException($"麦克风录制启动失败，错误码 {startResult}。");
+            throw;
         }
     }
 
+    /// <summary>
+    /// Pauses the active audio capture without finalizing its output file.
+    /// </summary>
     public void Pause()
     {
         if (_waveInHandle != IntPtr.Zero && _isRecording)
         {
-            waveInStop(_waveInHandle);
+            var result = waveInStop(_waveInHandle);
+            if (result != 0)
+                throw new InvalidOperationException($"麦克风暂停失败，错误码 {result}。");
+            _isPaused = true;
         }
     }
 
-    public void Resume()
+    /// <summary>
+    /// Resumes a previously paused audio capture.
+    /// </summary>
+    public void Resume(TimeSpan timelineOffset = default)
     {
         if (_waveInHandle != IntPtr.Zero && _isRecording)
         {
-            waveInStart(_waveInHandle);
+            var result = waveInStart(_waveInHandle);
+            if (result != 0)
+                throw new InvalidOperationException($"麦克风恢复失败，错误码 {result}。");
+            _isPaused = false;
         }
     }
 
+    /// <summary>
+    /// Stops the capture loop and releases its active capture resources.
+    /// </summary>
     public void Stop()
     {
+        _stopCompleted.Reset();
+        if (Interlocked.CompareExchange(ref _stopInProgress, 1, 0) != 0)
+        {
+            _stopCompleted.Wait(TimeSpan.FromSeconds(5));
+            return;
+        }
+
+        try
+        {
         if (_waveInHandle == IntPtr.Zero)
         {
+            lock (_sync)
+            {
+                _outputStream?.Dispose();
+                _outputStream = null;
+            }
             return;
         }
 
         _isRecording = false;
+        _isPaused = false;
         waveInStop(_waveInHandle);
         waveInReset(_waveInHandle);
 
@@ -112,12 +207,21 @@ public sealed class MicrophoneCaptureService : IAudioCaptureService
         waveInClose(_waveInHandle);
         _waveInHandle = IntPtr.Zero;
 
-        if (_outputStream is not null)
+        lock (_sync)
         {
-            _outputStream.Seek(0, SeekOrigin.Begin);
-            WriteWaveHeader(_outputStream, _dataLength);
-            _outputStream.Dispose();
-            _outputStream = null;
+            if (_outputStream is not null)
+            {
+                _outputStream.Seek(0, SeekOrigin.Begin);
+                WriteWaveHeader(_outputStream, _dataLength);
+                _outputStream.Dispose();
+                _outputStream = null;
+            }
+        }
+        }
+        finally
+        {
+            _stopCompleted.Set();
+            Interlocked.Exchange(ref _stopInProgress, 0);
         }
     }
 
@@ -128,27 +232,47 @@ public sealed class MicrophoneCaptureService : IAudioCaptureService
             return;
         }
 
-        var header = Marshal.PtrToStructure<WAVEHDR>(dwParam1);
-        if (header.dwBytesRecorded > 0 && _outputStream is not null)
+        try
         {
-            var recordedBytes = new byte[header.dwBytesRecorded];
-            Marshal.Copy(header.lpData, recordedBytes, 0, recordedBytes.Length);
-
-            lock (_sync)
+            var header = Marshal.PtrToStructure<WAVEHDR>(dwParam1);
+            if (header.dwBytesRecorded > 0)
             {
-                _outputStream.Write(recordedBytes, 0, recordedBytes.Length);
-                _dataLength += recordedBytes.Length;
+                var recordedBytes = new byte[header.dwBytesRecorded];
+                Marshal.Copy(header.lpData, recordedBytes, 0, recordedBytes.Length);
+
+                lock (_sync)
+                {
+                    if (_outputStream is not null)
+                    {
+                        _outputStream.Write(recordedBytes, 0, recordedBytes.Length);
+                        _dataLength = checked(_dataLength + recordedBytes.Length);
+                    }
+                }
             }
-        }
 
-        if (!_isRecording || _waveInHandle == IntPtr.Zero)
+            if (!_isRecording || _waveInHandle == IntPtr.Zero)
+                return;
+
+            header.dwBytesRecorded = 0;
+            Marshal.StructureToPtr(header, dwParam1, false);
+            var result = waveInAddBuffer(_waveInHandle, dwParam1, Marshal.SizeOf<WAVEHDR>());
+            if (result != 0)
+                throw new InvalidOperationException($"麦克风缓冲区重新提交失败，错误码 {result}。");
+        }
+        catch (Exception ex)
         {
-            return;
-        }
+            if (Interlocked.Exchange(ref _failureRaised, 1) == 0)
+            {
+                try { CaptureFailed?.Invoke(this, new AudioCaptureFailedEventArgs("麦克风", ex)); }
+                catch { }
+            }
 
-        header.dwBytesRecorded = 0;
-        Marshal.StructureToPtr(header, dwParam1, false);
-        waveInAddBuffer(_waveInHandle, dwParam1, Marshal.SizeOf<WAVEHDR>());
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { Stop(); }
+                catch { }
+            });
+        }
     }
 
     private static WAVEFORMATEX CreateWaveFormat()
@@ -233,25 +357,70 @@ public sealed class MicrophoneCaptureService : IAudioCaptureService
     [StructLayout(LayoutKind.Sequential)]
     private struct WAVEFORMATEX
     {
+        /// <summary>
+        /// Contains the wave format encoding identifier.
+        /// </summary>
         public ushort wFormatTag;
+        /// <summary>
+        /// Contains the number of audio channels in the native wave format structure.
+        /// </summary>
         public short nChannels;
+        /// <summary>
+        /// Contains the sample rate, in samples per second, in the native wave format structure.
+        /// </summary>
         public int nSamplesPerSec;
+        /// <summary>
+        /// Contains the average byte rate in the native wave format structure.
+        /// </summary>
         public int nAvgBytesPerSec;
+        /// <summary>
+        /// Contains the block alignment, in bytes, in the native wave format structure.
+        /// </summary>
         public short nBlockAlign;
+        /// <summary>
+        /// Contains the sample bit depth in the native wave format structure.
+        /// </summary>
         public short wBitsPerSample;
+        /// <summary>
+        /// Contains the size of any format-specific extension data.
+        /// </summary>
         public short cbSize;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct WAVEHDR
     {
+        /// <summary>
+        /// Points to the native audio buffer data.
+        /// </summary>
         public IntPtr lpData;
+        /// <summary>
+        /// Contains the allocated size of the native audio buffer in bytes.
+        /// </summary>
         public uint dwBufferLength;
+        /// <summary>
+        /// Contains the number of valid audio bytes in the native buffer.
+        /// </summary>
         public uint dwBytesRecorded;
+        /// <summary>
+        /// Contains the application-defined user value associated with the native audio buffer.
+        /// </summary>
         public IntPtr dwUser;
+        /// <summary>
+        /// Contains the native audio-buffer status flags.
+        /// </summary>
         public uint dwFlags;
+        /// <summary>
+        /// Contains the remaining playback-loop count in the native audio buffer header.
+        /// </summary>
         public uint dwLoops;
+        /// <summary>
+        /// Points to the next native audio buffer header in a linked list.
+        /// </summary>
         public IntPtr lpNext;
+        /// <summary>
+        /// Reserved native audio-buffer field required by the Windows API layout.
+        /// </summary>
         public IntPtr reserved;
     }
 
@@ -278,4 +447,7 @@ public sealed class MicrophoneCaptureService : IAudioCaptureService
 
     [DllImport("winmm.dll")]
     private static extern int waveInClose(IntPtr hWaveIn);
+
+    [DllImport("winmm.dll")]
+    private static extern uint waveInGetNumDevs();
 }

@@ -3,23 +3,33 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Maintains a rolling background frame capture and exports selected replay clips.
+/// </summary>
 public sealed class ReplayBufferService
 {
-    private const long MaxReplayBufferBytes = 384L * 1024 * 1024;
-    private readonly object _sync = new();
+    private readonly ReplayFrameBuffer _frameBuffer = new();
     private readonly ScreenCaptureService _screenCaptureService;
     private readonly FrameSequenceEncoder _frameSequenceEncoder;
     private readonly RecordingSessionState _session;
-    private readonly DispatcherTimer _captureTimer;
-    private readonly LinkedList<ReplayFrameSnapshot> _frames = [];
-    private long _bufferedBytes;
+    private readonly Dispatcher _dispatcher;
+    private CancellationTokenSource? _captureCancellation;
+    private Task? _captureLoopTask;
 
+    /// <summary>
+    /// Raised when a background replay frame cannot be captured.
+    /// </summary>
     public event EventHandler<FrameCaptureFailedEventArgs>? FrameCaptureFailed;
 
+    /// <summary>
+    /// Initializes background replay capture and subscribes to session-setting changes.
+    /// </summary>
     public ReplayBufferService(
         ScreenCaptureService screenCaptureService,
         FrameSequenceEncoder frameSequenceEncoder,
@@ -28,36 +38,75 @@ public sealed class ReplayBufferService
         _screenCaptureService = screenCaptureService;
         _frameSequenceEncoder = frameSequenceEncoder;
         _session = session;
-        _captureTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(1)
-        };
-        _captureTimer.Tick += (_, _) => CaptureFrame();
+        _dispatcher = Dispatcher.CurrentDispatcher;
         _session.StateChanged += (_, _) => OnSessionStateChanged();
     }
 
+    /// <summary>
+    /// Gets whether background replay buffering is enabled in the current session settings.
+    /// </summary>
     public bool IsEnabled => _session.ReplayBufferEnabled;
-    public bool IsRunning => _captureTimer.IsEnabled;
+    /// <summary>
+    /// Gets whether the background replay capture loop is currently active.
+    /// </summary>
+    public bool IsRunning => _captureLoopTask is { IsCompleted: false };
 
+    /// <summary>
+    /// Starts the background replay capture loop when replay is enabled and no loop is already running.
+    /// </summary>
     public void Start()
     {
-        if (!_session.ReplayBufferEnabled || _captureTimer.IsEnabled)
+        if (!_session.ReplayBufferEnabled || IsRunning)
         {
             return;
         }
 
-        UpdateCaptureInterval();
-        _captureTimer.Start();
-        CaptureFrame();
+        var cancellation = new CancellationTokenSource();
+        _captureCancellation = cancellation;
+        _captureLoopTask = CaptureLoopAsync(cancellation.Token);
     }
 
+    /// <summary>
+    /// Stops the capture loop and releases its active capture resources.
+    /// </summary>
     public void Stop()
     {
-        _captureTimer.Stop();
-        _frames.Clear();
-        _bufferedBytes = 0;
+        _ = StopAsync(clearFrames: true, restartIfEnabled: true);
     }
 
+    /// <summary>
+    /// Stops the background capture loop, optionally clears retained frames, and can restart capture when replay remains enabled.
+    /// </summary>
+    public async Task StopAsync(bool clearFrames = true, bool restartIfEnabled = false)
+    {
+        var cancellation = _captureCancellation;
+        var loopTask = _captureLoopTask;
+        if (cancellation is not null)
+            await cancellation.CancelAsync().ConfigureAwait(false);
+
+        if (loopTask is not null)
+        {
+            try { await loopTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+        }
+
+        if (ReferenceEquals(_captureCancellation, cancellation))
+        {
+            _captureCancellation = null;
+            _captureLoopTask = null;
+        }
+        cancellation?.Dispose();
+
+        if (clearFrames)
+            _frameBuffer.Clear();
+
+        if (restartIfEnabled && _session.ReplayBufferEnabled)
+            Start();
+    }
+
+    /// <summary>
+    /// Snapshots the buffered frames and session options required to export a replay.
+    /// </summary>
     public ReplayExport? PrepareReplayExport(RecordingSessionState session)
     {
         if (!session.ReplayBufferEnabled)
@@ -67,16 +116,9 @@ public sealed class ReplayBufferService
 
         var profile = CaptureQualityProfile.FromPreset(session.QualityPreset);
         var cutoff = DateTimeOffset.Now.AddSeconds(-Math.Max(1, session.ReplaySeconds));
-        List<ReplayFrameSnapshot> replayFrames;
-        lock (_sync)
-        {
-            replayFrames = _frames
-                .Where(frame => frame.CapturedAt >= cutoff)
-                .Select(frame => frame with { })
-                .ToList();
-        }
+        var replayFrames = _frameBuffer.SnapshotAfter(cutoff);
 
-        if (replayFrames.Count == 0)
+        if (replayFrames.Length == 0)
         {
             return null;
         }
@@ -89,18 +131,34 @@ public sealed class ReplayBufferService
             replayFrames);
     }
 
-    public CaptureArtifact SaveReplay(ReplayExport export)
+    /// <summary>
+    /// Exports the prepared replay frames and returns the resulting capture artifact.
+    /// </summary>
+    public async Task<CaptureArtifact> SaveReplayAsync(ReplayExport export, CancellationToken cancellationToken = default)
     {
         var replayFrames = export.Frames;
-
-        var outputDirectory = CaptureOutputPathHelper.CreateArtifactDirectory(export.OutputDirectory, "Replays", "Replay");
-        var exportWorkspace = CreateExportWorkspace();
+        var paths = await Task.Run(() =>
+        {
+            var output = CaptureOutputPathHelper.CreateArtifactDirectory(export.OutputDirectory, "Replays", "Replay");
+            try
+            {
+                return (OutputDirectory: output, ExportWorkspace: CreateExportWorkspace());
+            }
+            catch
+            {
+                TryDeleteDirectory(output);
+                throw;
+            }
+        }, cancellationToken).ConfigureAwait(false);
+        var outputDirectory = paths.OutputDirectory;
+        var exportWorkspace = paths.ExportWorkspace;
         try
         {
             for (var i = 0; i < replayFrames.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var fileName = $"frame-{i:D4}.jpg";
-                File.WriteAllBytes(Path.Combine(exportWorkspace, fileName), replayFrames[i].JpegBytes);
+                await File.WriteAllBytesAsync(Path.Combine(exportWorkspace, fileName), replayFrames[i].JpegBytes, cancellationToken).ConfigureAwait(false);
             }
 
             var actualDurationSeconds = replayFrames.Count <= 1
@@ -124,23 +182,25 @@ public sealed class ReplayBufferService
                     frame.CapturedAt)).ToList());
 
             var manifestPath = Path.Combine(exportWorkspace, "replay.json");
-            File.WriteAllText(
+            await File.WriteAllTextAsync(
                 manifestPath,
-                JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+                JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }), cancellationToken).ConfigureAwait(false);
 
             string? mp4Path = null;
             string? detail = BuildReplayDetail(export.ReplaySeconds, actualDurationSeconds, encodedDurationSeconds);
             try
             {
-                mp4Path = _frameSequenceEncoder.TryEncodeMp4(exportWorkspace, "replay", export.TargetFrameRate);
+                mp4Path = await _frameSequenceEncoder.TryEncodeMp4Async(
+                    exportWorkspace, "replay", export.TargetFrameRate, cancellationToken).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 preserveFrameSequence = true;
                 manifest = manifest with { PreserveFrameSequence = true };
-                File.WriteAllText(
+                await File.WriteAllTextAsync(
                     manifestPath,
-                    JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+                    JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }), cancellationToken).ConfigureAwait(false);
                 detail = AppendDetail(detail, $"MP4 导出失败，已保留帧序列：{ex.Message}");
             }
             if (!string.IsNullOrWhiteSpace(mp4Path) && File.Exists(mp4Path))
@@ -155,9 +215,9 @@ public sealed class ReplayBufferService
                 ? detail
                 : AppendDetail(detail, "当前未找到 ffmpeg，已保留帧序列。");
             manifest = manifest with { PreserveFrameSequence = true };
-            File.WriteAllText(
+            await File.WriteAllTextAsync(
                 manifestPath,
-                JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+                JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }), cancellationToken).ConfigureAwait(false);
             MoveDirectoryContents(exportWorkspace, outputDirectory);
             return new CaptureArtifact("回录", outputDirectory, replayFrames.Count, Detail: fallbackDetail);
         }
@@ -172,54 +232,54 @@ public sealed class ReplayBufferService
         }
     }
 
-    private void CaptureFrame()
+    private async Task CaptureLoopAsync(CancellationToken cancellationToken)
     {
-        if (!_session.ReplayBufferEnabled)
-        {
-            return;
-        }
-
         try
         {
-            var jpegBytes = _screenCaptureService.CaptureFrameJpegBytes(_session.QualityPreset);
-            if (jpegBytes.Length == 0)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                return;
-            }
+                if (_session.ReplayBufferEnabled)
+                    await CaptureFrameAsync(cancellationToken).ConfigureAwait(false);
 
-            lock (_sync)
-            {
-                _frames.AddLast(new ReplayFrameSnapshot(DateTimeOffset.Now, jpegBytes));
-                _bufferedBytes += jpegBytes.LongLength;
-                TrimFrames();
+                var profile = CaptureQualityProfile.FromPreset(_session.QualityPreset);
+                var interval = TimeSpan.FromMilliseconds(Math.Max(120, 1000.0 / profile.ReplayFrameRate));
+                await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    private async Task CaptureFrameAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var qualityPreset = _session.QualityPreset;
+            var jpegBytes = await Task.Run(() => _screenCaptureService.CaptureFrameJpegBytes(qualityPreset), cancellationToken).ConfigureAwait(false);
+            if (jpegBytes.Length == 0)
+                return;
+
+            if (cancellationToken.IsCancellationRequested || !_session.ReplayBufferEnabled)
+                return;
+            if (!cancellationToken.IsCancellationRequested)
+                _frameBuffer.Add(new ReplayFrameSnapshot(DateTimeOffset.Now, jpegBytes));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            FrameCaptureFailed?.Invoke(this, new FrameCaptureFailedEventArgs(ex));
+            RaiseFrameCaptureFailed(ex);
         }
     }
 
-    private void TrimFrames()
+    private void RaiseFrameCaptureFailed(Exception exception)
     {
-        var cutoff = DateTimeOffset.Now.AddSeconds(-(Math.Max(30, _session.ReplaySeconds) + 5));
-        while (_frames.First is not null && _frames.First.Value.CapturedAt < cutoff)
-        {
-            _bufferedBytes -= _frames.First.Value.JpegBytes.LongLength;
-            _frames.RemoveFirst();
-        }
-
-        while (_frames.First is not null && _bufferedBytes > MaxReplayBufferBytes)
-        {
-            _bufferedBytes -= _frames.First.Value.JpegBytes.LongLength;
-            _frames.RemoveFirst();
-        }
-    }
-
-    private void UpdateCaptureInterval()
-    {
-        var profile = CaptureQualityProfile.FromPreset(_session.QualityPreset);
-        _captureTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(120, 1000.0 / profile.ReplayFrameRate));
+        void Raise() => FrameCaptureFailed?.Invoke(this, new FrameCaptureFailedEventArgs(exception));
+        if (_dispatcher.CheckAccess())
+            Raise();
+        else if (!_dispatcher.HasShutdownStarted && !_dispatcher.HasShutdownFinished)
+            _dispatcher.BeginInvoke(Raise);
     }
 
     private void OnSessionStateChanged()
@@ -230,18 +290,21 @@ public sealed class ReplayBufferService
             return;
         }
 
-        UpdateCaptureInterval();
-        lock (_sync)
-        {
-            TrimFrames();
-        }
-        if (!_captureTimer.IsEnabled)
+        var cutoff = DateTimeOffset.Now.AddSeconds(-(Math.Max(30, _session.ReplaySeconds) + 5));
+        _frameBuffer.TrimOlderThan(cutoff);
+        if (!IsRunning)
         {
             Start();
         }
     }
 
+    /// <summary>
+    /// Holds one timestamped JPEG frame retained by the replay buffer.
+    /// </summary>
     public sealed record ReplayFrameSnapshot(DateTimeOffset CapturedAt, byte[] JpegBytes);
+    /// <summary>
+    /// Contains the immutable frame and session data prepared for replay export.
+    /// </summary>
     public sealed record ReplayExport(
         string OutputDirectory,
         int ReplaySeconds,
@@ -249,6 +312,9 @@ public sealed class ReplayBufferService
         int TargetFrameRate,
         IReadOnlyList<ReplayFrameSnapshot> Frames);
 
+    /// <summary>
+    /// Carries the exception raised when a background replay frame cannot be captured.
+    /// </summary>
     public sealed record FrameCaptureFailedEventArgs(Exception Exception);
 
     private sealed record ReplayArtifactManifest(

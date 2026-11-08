@@ -6,11 +6,17 @@ using System.Windows.Threading;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Shows post-capture quick actions for a saved screenshot.
+/// </summary>
 public partial class ScreenshotActionToastWindow : Window
 {
     private static ScreenshotActionToastWindow? _currentToast;
     private readonly DispatcherTimer _closeTimer;
 
+    /// <summary>
+    /// Initializes the screenshot quick-action toast for the saved image and screen position.
+    /// </summary>
     public ScreenshotActionToastWindow(string screenshotPath, Point position)
     {
         if (_currentToast is not null && _currentToast.IsVisible)
@@ -21,6 +27,7 @@ public partial class ScreenshotActionToastWindow : Window
         _currentToast = this;
 
         InitializeComponent();
+        LocalizationManager.RegisterWindow(this);
         Left = position.X;
         Top = position.Y;
         PathText.Text = Path.GetFileName(screenshotPath);
@@ -38,8 +45,14 @@ public partial class ScreenshotActionToastWindow : Window
         Closed += (_, _) => _currentToast = null;
     }
 
+    /// <summary>
+    /// Gets the path of the screenshot associated with this quick-action toast.
+    /// </summary>
     public string ScreenshotPath { get; }
 
+    /// <summary>
+    /// Raised when the user selects a quick action for the saved screenshot.
+    /// </summary>
     public event EventHandler<ScreenshotQuickAction>? ActionRequested;
 
     private void PinButton_Click(object sender, RoutedEventArgs e)

@@ -1,7 +1,7 @@
 <Window x:Class="ScreenTools.ScreenshotStickerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Screenshot Sticker"
+        Title="截图贴纸"
         Width="460"
         Height="320"
         WindowStyle="None"

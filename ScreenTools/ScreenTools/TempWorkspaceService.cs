@@ -5,17 +5,40 @@ using System.Security.Principal;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Creates and cleans temporary workspaces used while recording and exporting.
+/// </summary>
 public sealed class TempWorkspaceService
 {
-    public string RecordingWorkspaceRoot =>
-        Path.Combine(Path.GetTempPath(), "LensSnap", "recording");
+    private readonly string _recordingWorkspaceRoot;
 
+    /// <summary>
+    /// Initializes the workspace service with the application default or a caller-supplied root.
+    /// </summary>
+    public TempWorkspaceService(string? recordingWorkspaceRoot = null)
+    {
+        _recordingWorkspaceRoot = string.IsNullOrWhiteSpace(recordingWorkspaceRoot)
+            ? Path.Combine(Path.GetTempPath(), "LensSnap", "recording")
+            : Path.GetFullPath(recordingWorkspaceRoot);
+    }
+
+    /// <summary>
+    /// Gets the root directory used for temporary recording workspaces.
+    /// </summary>
+    public string RecordingWorkspaceRoot => _recordingWorkspaceRoot;
+
+    /// <summary>
+    /// Creates the temporary workspace required for recording and export.
+    /// </summary>
     public void EnsureWorkspace()
     {
         Directory.CreateDirectory(RecordingWorkspaceRoot);
         HardenDirectoryPermissions(RecordingWorkspaceRoot);
     }
 
+    /// <summary>
+    /// Deletes recording workspaces older than the supplied age threshold.
+    /// </summary>
     public void CleanupStaleRecordingWorkspaces(TimeSpan maxAge)
     {
         if (!Directory.Exists(RecordingWorkspaceRoot))

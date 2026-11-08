@@ -6,10 +6,12 @@
         xmlns:controls="clr-namespace:ScreenTools.Controls"
         mc:Ignorable="d"
         Title="LensSnap"
-        Width="1280"
-        Height="1040"
-        MinWidth="1100"
-        MinHeight="900"
+        Width="1100"
+        Height="900"
+        MinWidth="720"
+        MinHeight="600"
+        SizeToContent="Manual"
+        SizeChanged="MainWindow_SizeChanged"
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
@@ -534,17 +536,17 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       Background="{StaticResource PageBackgroundBrush}">
-            <Grid Margin="80,0">
-                <StackPanel Width="900"
+            <Grid Margin="24,0">
+                <StackPanel MaxWidth="900"
                             Margin="0,108,0,80"
-                            HorizontalAlignment="Center">
+                            HorizontalAlignment="Stretch">
 
                     <!-- ───────────────────────────────
                          PAGE HEADER
                          ─────────────────────────────── -->
                     <StackPanel Margin="0,0,0,36">
                         <TextBlock Style="{StaticResource EyebrowStyle}"
-                                   Text="SETTINGS"/>
+                                   Text="设置"/>
                         <TextBlock Margin="0,12,0,0"
                                    Style="{StaticResource PageTitleStyle}"
                                    Text="让高频操作更安静地待在前台"/>
@@ -580,7 +582,7 @@
                     <!-- ───────────────────────────────
                          TWO-COLUMN CONTENT GRID
                          ─────────────────────────────── -->
-                    <Grid>
+                    <Grid x:Name="ContentColumns">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -589,7 +591,7 @@
                         <!-- ═══════════════════════════
                              LEFT COLUMN
                              ═══════════════════════════ -->
-                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                        <StackPanel x:Name="LeftColumn" Grid.Column="0" Margin="0,0,8,0">
 
                             <!-- ╔══════════════════════╗
                                  ║  截图设置            ║
@@ -695,7 +697,7 @@
                                     <!-- 保存路径 -->
                                     <controls:SettingRowControl x:Name="OutputDirectoryRow"
                                                                 Title="保存路径"
-                                                                Description="C:\Users\Admin\Pictures\LensSnap">
+                                                                Description="默认保存位置">
                                         <controls:SettingRowControl.RightContent>
                                             <Button Style="{StaticResource LinkButtonStyle}"
                                                     Click="ChangeOutputDirectory_Click"
@@ -805,7 +807,7 @@
                         <!-- ═══════════════════════════
                              RIGHT COLUMN
                              ═══════════════════════════ -->
-                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                        <StackPanel x:Name="RightColumn" Grid.Column="1" Margin="8,0,0,0">
 
                             <!-- ╔══════════════════════╗
                                  ║  回录设置            ║
@@ -1047,12 +1049,30 @@
                     <TextBlock FontSize="9"
                                FontWeight="Bold"
                                Foreground="{StaticResource PrimaryBrush}"
-                               Text="LOCAL"/>
+                               Text="本地"/>
                 </Border>
                 <TextBlock VerticalAlignment="Center"
                            FontSize="11"
                            Foreground="{StaticResource SubtleTextBrush}"
-                           Text="Screen capture workspace"/>
+                           Text="屏幕捕获工作区"/>
+                <Button x:Name="LanguageButton" Margin="16,0,0,0" Padding="10,5" MinWidth="116"
+                        Background="{StaticResource PrimaryChipBrush}" BorderBrush="{StaticResource PrimaryBorderBrush}"
+                        BorderThickness="1" Foreground="{StaticResource HeadingBrush}" FontSize="11"
+                        FontWeight="SemiBold" Cursor="Hand" Content="🌐 English  ▾" Click="LanguageButton_Click"/>
+                <Popup x:Name="LanguagePopup" PlacementTarget="{Binding ElementName=LanguageButton}"
+                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Border Margin="0,6,0,0" Padding="6" MinWidth="150" Background="#FFFFFF"
+                            BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1" CornerRadius="10">
+                        <StackPanel>
+                            <Button Tag="en" Content="English" Click="SelectLanguage_Click" Padding="10,8"
+                                    HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                            <Button Tag="fr" Content="Français" Click="SelectLanguage_Click" Padding="10,8"
+                                    HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                            <Button Tag="zh-CN" Content="简体中文" Click="SelectLanguage_Click" Padding="10,8"
+                                    HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
             </StackPanel>
         </Border>
 

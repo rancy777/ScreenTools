@@ -1,7 +1,7 @@
 <Window x:Class="ScreenTools.ScreenshotActionToastWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Screenshot Actions"
+        Title="截图操作"
         Width="452"
         Height="188"
         WindowStyle="None"
@@ -55,7 +55,7 @@
                            FontSize="12"
                            Foreground="#FF5F6B7A"
                            TextTrimming="CharacterEllipsis"
-                           Text="path" />
+                           Text="路径" />
             </StackPanel>
 
             <StackPanel Grid.Row="1"

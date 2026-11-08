@@ -8,8 +8,14 @@ using Forms = System.Windows.Forms;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Captures full-screen or selected-region screenshots and JPEG recording frames.
+/// </summary>
 public sealed class ScreenCaptureService : IScreenCaptureService
 {
+    /// <summary>
+    /// Captures the configured screenshot target and writes the resulting artifact.
+    /// </summary>
     public CaptureArtifact CaptureScreenshot(RecordingSessionState session)
     {
         if (session is null)
@@ -22,9 +28,9 @@ public sealed class ScreenCaptureService : IScreenCaptureService
 
         try
         {
-            using var bitmap = CaptureVirtualScreen();
+            using var bitmap = CaptureVirtualScreen(out var screenBounds);
             SaveBitmap(bitmap, outputPath, extension);
-            return new CaptureArtifact("截图", outputPath, 1, CaptureBounds: new Rect(0, 0, bitmap.Width, bitmap.Height));
+            return new CaptureArtifact("截图", outputPath, 1, CaptureBounds: new Rect(screenBounds.X, screenBounds.Y, screenBounds.Width, screenBounds.Height));
         }
         catch (Exception ex)
         {
@@ -32,6 +38,9 @@ public sealed class ScreenCaptureService : IScreenCaptureService
         }
     }
 
+    /// <summary>
+    /// Captures and saves the selected screen rectangle.
+    /// </summary>
     public CaptureArtifact CaptureScreenshotRegion(RecordingSessionState session, Rect region)
     {
         if (session is null)
@@ -44,9 +53,9 @@ public sealed class ScreenCaptureService : IScreenCaptureService
 
         try
         {
-            using var bitmap = CaptureRegion(region);
+            using var bitmap = CaptureRegion(region, out var capturedBounds);
             SaveBitmap(bitmap, outputPath, extension);
-            return new CaptureArtifact("截图", outputPath, 1, CaptureBounds: region);
+            return new CaptureArtifact("截图", outputPath, 1, CaptureBounds: new Rect(capturedBounds.X, capturedBounds.Y, capturedBounds.Width, capturedBounds.Height));
         }
         catch (Exception ex)
         {
@@ -54,6 +63,9 @@ public sealed class ScreenCaptureService : IScreenCaptureService
         }
     }
 
+    /// <summary>
+    /// Captures the current desktop as a JPEG file using the selected quality preset.
+    /// </summary>
     public void CaptureFrameJpeg(string outputPath, string qualityPreset)
     {
         if (string.IsNullOrWhiteSpace(outputPath))
@@ -71,6 +83,9 @@ public sealed class ScreenCaptureService : IScreenCaptureService
         }
     }
 
+    /// <summary>
+    /// Captures the current desktop and returns its JPEG-encoded bytes.
+    /// </summary>
     public byte[] CaptureFrameJpegBytes(string qualityPreset)
     {
         if (string.IsNullOrWhiteSpace(qualityPreset))
@@ -81,10 +96,25 @@ public sealed class ScreenCaptureService : IScreenCaptureService
         try
         {
             var profile = CaptureQualityProfile.FromPreset(qualityPreset);
-            using var bitmap = CaptureVirtualScreen();
-            using var scaledBitmap = ResizeBitmap(bitmap, profile.MaxWidth);
+            using var bitmap = CaptureVirtualScreen(out _);
             using var stream = new MemoryStream();
-            SaveJpeg(scaledBitmap, stream, profile.JpegQuality);
+            Drawing.Bitmap? resizedBitmap = null;
+            try
+            {
+                var encodingBitmap = bitmap;
+                if (bitmap.Width > profile.MaxWidth)
+                {
+                    resizedBitmap = ResizeBitmap(bitmap, profile.MaxWidth);
+                    encodingBitmap = resizedBitmap;
+                }
+
+                SaveJpeg(encodingBitmap, stream, profile.JpegQuality);
+            }
+            finally
+            {
+                resizedBitmap?.Dispose();
+            }
+
             return stream.ToArray();
         }
         catch (Exception ex)
@@ -95,10 +125,10 @@ public sealed class ScreenCaptureService : IScreenCaptureService
 
     private const long MaxCaptureMemoryBytes = 500L * 1024 * 1024; // 500 MB
 
-    private static Drawing.Bitmap CaptureVirtualScreen()
+    private static Drawing.Bitmap CaptureVirtualScreen(out Drawing.Rectangle screenBounds)
     {
-        var screenBounds = Forms.SystemInformation.VirtualScreen;
-        var estimatedMemory = (long)screenBounds.Width * screenBounds.Height * 4; // BGRA
+        screenBounds = GetVirtualScreenBounds();
+        var estimatedMemory = (long)screenBounds.Width * screenBounds.Height * 3; // 24-bit RGB
         if (estimatedMemory > MaxCaptureMemoryBytes)
         {
             throw new InvalidOperationException($"屏幕分辨率过高（{screenBounds.Width}x{screenBounds.Height}，预计占用 {estimatedMemory / (1024 * 1024)} MB），超过内存预算 {MaxCaptureMemoryBytes / (1024 * 1024)} MB。请降低显示缩放或选择区域截图。");
@@ -107,18 +137,19 @@ public sealed class ScreenCaptureService : IScreenCaptureService
         return CaptureScreenArea(screenBounds.Left, screenBounds.Top, screenBounds.Width, screenBounds.Height);
     }
 
-    private static Drawing.Bitmap CaptureRegion(Rect region)
+    private static Drawing.Bitmap CaptureRegion(Rect region, out Drawing.Rectangle capturedBounds)
     {
-        return CaptureScreenArea(
-            (int)Math.Round(region.X),
-            (int)Math.Round(region.Y),
-            Math.Max(1, (int)Math.Round(region.Width)),
-            Math.Max(1, (int)Math.Round(region.Height)));
+        var requestedBounds = DesktopCaptureGeometry.ToPixelRectangle(region);
+        capturedBounds = DesktopCaptureGeometry.ClipToVirtualBounds(requestedBounds, GetVirtualScreenBounds());
+        return CaptureScreenArea(capturedBounds.Left, capturedBounds.Top, capturedBounds.Width, capturedBounds.Height);
     }
+
+    private static Drawing.Rectangle GetVirtualScreenBounds() =>
+        DesktopCaptureGeometry.GetVirtualBounds(Forms.Screen.AllScreens.Select(screen => screen.Bounds));
 
     private static Drawing.Bitmap CaptureScreenArea(int x, int y, int width, int height)
     {
-        var bitmap = new Drawing.Bitmap(width, height, DrawingImaging.PixelFormat.Format32bppArgb);
+        var bitmap = new Drawing.Bitmap(width, height, DrawingImaging.PixelFormat.Format24bppRgb);
         using var graphics = Drawing.Graphics.FromImage(bitmap);
         graphics.CopyFromScreen(x, y, 0, 0, new Drawing.Size(width, height), Drawing.CopyPixelOperation.SourceCopy);
         return bitmap;
@@ -126,14 +157,9 @@ public sealed class ScreenCaptureService : IScreenCaptureService
 
     private static Drawing.Bitmap ResizeBitmap(Drawing.Bitmap source, int maxWidth)
     {
-        if (source.Width <= maxWidth)
-        {
-            return (Drawing.Bitmap)source.Clone();
-        }
-
         var ratio = (double)maxWidth / source.Width;
         var targetSize = new Drawing.Size(maxWidth, (int)Math.Round(source.Height * ratio));
-        var resized = new Drawing.Bitmap(targetSize.Width, targetSize.Height);
+        var resized = new Drawing.Bitmap(targetSize.Width, targetSize.Height, DrawingImaging.PixelFormat.Format24bppRgb);
 
         using var graphics = Drawing.Graphics.FromImage(resized);
         graphics.InterpolationMode = Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
@@ -165,12 +191,13 @@ public sealed class ScreenCaptureService : IScreenCaptureService
 
     private static void SaveJpeg(Drawing.Image image, Stream outputStream, long quality)
     {
-        var jpegEncoder = DrawingImaging.ImageCodecInfo.GetImageDecoders()
-            .First(codec => codec.FormatID == DrawingImaging.ImageFormat.Jpeg.Guid);
         using var encoderParameters = new DrawingImaging.EncoderParameters(1);
         encoderParameters.Param[0] = new DrawingImaging.EncoderParameter(DrawingImaging.Encoder.Quality, quality);
-        image.Save(outputStream, jpegEncoder, encoderParameters);
+        image.Save(outputStream, JpegEncoder, encoderParameters);
     }
+
+    private static readonly DrawingImaging.ImageCodecInfo JpegEncoder = DrawingImaging.ImageCodecInfo.GetImageEncoders()
+        .First(codec => codec.FormatID == DrawingImaging.ImageFormat.Jpeg.Guid);
 
     private static string NormalizeImageExtension(string format) =>
         format.Trim().ToUpperInvariant() switch

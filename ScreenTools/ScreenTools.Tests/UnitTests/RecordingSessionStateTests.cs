@@ -24,4 +24,18 @@ public class RecordingSessionStateTests
         Assert.True(raised);
         Assert.Equal("720P 30FPS", state.QualityPreset);
     }
+
+    [Fact]
+    public void Language_IsNormalizedAndRaisesStateChanged()
+    {
+        var state = new RecordingSessionState();
+        state.Language = LocalizationManager.English;
+        var raised = false;
+        state.StateChanged += (_, _) => raised = true;
+
+        state.Language = "fr-FR";
+
+        Assert.True(raised);
+        Assert.Equal(LocalizationManager.French, state.Language);
+    }
 }

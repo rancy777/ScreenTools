@@ -2,8 +2,14 @@ using System;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Defines capture dimensions, frame rates, and JPEG quality for a named preset.
+/// </summary>
 public sealed record CaptureQualityProfile(string Name, int MaxWidth, int RecordingFrameRate, int ReplayFrameRate, long JpegQuality)
 {
+    /// <summary>
+    /// Resolves a quality profile from a saved preset name, using the default profile for unknown values.
+    /// </summary>
     public static CaptureQualityProfile FromPreset(string? preset)
     {
         var normalizedPreset = preset?.Trim() ?? string.Empty;

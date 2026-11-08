@@ -3,11 +3,17 @@ using Microsoft.Win32;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Reads and updates whether LensSnap launches when the user signs in.
+/// </summary>
 public sealed class StartupLaunchService
 {
     private const string RegistryRunPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "LensSnap";
 
+    /// <summary>
+    /// Reports whether launching the application at user sign-in is enabled.
+    /// </summary>
     public bool IsEnabled()
     {
         try
@@ -21,6 +27,9 @@ public sealed class StartupLaunchService
         }
     }
 
+    /// <summary>
+    /// Enables or disables launching the application when the user signs in.
+    /// </summary>
     public void SetEnabled(bool enabled)
     {
         try

@@ -10,6 +10,9 @@ using System.Windows.Media.Imaging;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Manages clipboard history, image copying, and durable history persistence.
+/// </summary>
 public sealed class ClipboardManagerService : IClipboardManagerService
 {
     private const int MaxEntries = 8;
@@ -17,20 +20,35 @@ public sealed class ClipboardManagerService : IClipboardManagerService
     private readonly string _historyPath;
     private readonly List<ClipboardEntry> _entries = [];
 
-    public ClipboardManagerService()
+    /// <summary>
+    /// Initializes clipboard history and loads any previously persisted entries.
+    /// </summary>
+    public ClipboardManagerService(string? historyPath = null)
     {
         var appDataPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "LensSnap");
-        Directory.CreateDirectory(appDataPath);
-        _historyPath = Path.Combine(appDataPath, "clipboard-history.json");
+        _historyPath = Path.GetFullPath(historyPath ?? Path.Combine(appDataPath, "clipboard-history.json"));
         Load();
     }
 
+    /// <summary>
+    /// Raised when the corresponding history collection changes.
+    /// </summary>
     public event EventHandler? HistoryChanged;
+    /// <summary>
+    /// Raised when updated history or settings could not be persisted.
+    /// </summary>
+    public event EventHandler<Exception>? PersistenceFailed;
 
+    /// <summary>
+    /// Gets the current history entries in newest-first order.
+    /// </summary>
     public IReadOnlyList<ClipboardEntry> Entries => _entries;
 
+    /// <summary>
+    /// Loads an image file and attempts to place its bitmap on the Windows clipboard.
+    /// </summary>
     public ClipboardCopyResult CopyImageFromFile(string imagePath, string kind)
     {
         if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
@@ -114,11 +132,22 @@ public sealed class ClipboardManagerService : IClipboardManagerService
             }
 
             _entries.Clear();
-            _entries.AddRange(entries.Where(entry => !string.IsNullOrWhiteSpace(entry.OutputPath)));
+            _entries.AddRange(entries
+                .Where(entry => entry is not null && !string.IsNullOrWhiteSpace(entry.OutputPath))
+                .GroupBy(entry => entry.OutputPath, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .Take(MaxEntries));
         }
-        catch
+        catch (JsonException ex)
         {
             _entries.Clear();
+            QuarantineCorruptedHistory();
+            PersistenceFailed?.Invoke(this, ex);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            _entries.Clear();
+            PersistenceFailed?.Invoke(this, ex);
         }
     }
 
@@ -126,14 +155,25 @@ public sealed class ClipboardManagerService : IClipboardManagerService
     {
         try
         {
-            File.WriteAllText(
+            AtomicFilePersistence.WriteAllText(
                 _historyPath,
                 JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true }));
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {
-            // Clipboard history persistence is best-effort.
+            PersistenceFailed?.Invoke(this, ex);
         }
+    }
+
+    private void QuarantineCorruptedHistory()
+    {
+        try
+        {
+            if (File.Exists(_historyPath))
+                File.Move(_historyPath, $"{_historyPath}.corrupt-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}", overwrite: false);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private static string GetFailureDetail(Exception? error)

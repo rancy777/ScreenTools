@@ -2,184 +2,351 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
 namespace ScreenTools;
 
-public sealed class WasapiLoopbackCaptureService : IAudioCaptureService
+/// <summary>
+/// Captures the default Windows playback endpoint through WASAPI loopback without requiring Stereo Mix.
+/// </summary>
+public sealed class WasapiLoopbackCaptureService : IAudioCaptureService, IDisposable
 {
+    private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
     private readonly List<string> _availableDevices = [];
+    private readonly List<AudioCaptureSegment> _outputSegments = [];
+    private string? _selectedDeviceId;
     private string? _selectedDeviceName;
-    private readonly List<string> _outputPaths = [];
+    private string? _availabilityError;
+    private string? _baseOutputPath;
     private int _segmentIndex;
     private bool _isPaused;
-    private WaveFileWriter? _waveWriter;
+    private bool _stopRequested;
+    private int _failureRaised;
+    private int _stopInProgress;
     private WasapiLoopbackCapture? _capture;
-    private string? _baseOutputPath;
+    private WaveFileWriter? _waveWriter;
+    private MMDevice? _device;
+    private ManualResetEventSlim? _recordingStopped;
+    private readonly ManualResetEventSlim _stopCompleted = new(true);
 
-    public WasapiLoopbackCaptureService()
-    {
-    }
+    /// <summary>Initializes system-audio capture and discovers the default playback endpoint.</summary>
+    public WasapiLoopbackCaptureService() => RefreshAvailability();
 
-    public bool IsSupported => !string.IsNullOrWhiteSpace(_selectedDeviceName);
+    /// <inheritdoc />
+    public bool IsSupported => !string.IsNullOrWhiteSpace(_selectedDeviceId);
 
+    /// <inheritdoc />
+    public bool IsCapturing => _capture is not null && _recordingStopped?.IsSet != true;
+
+    /// <summary>Gets the active playback endpoint names, with the default endpoint first.</summary>
     public IReadOnlyList<string> AvailableDevices => _availableDevices;
 
+    /// <summary>Gets the selected playback endpoint name.</summary>
     public string? SelectedDeviceName => _selectedDeviceName;
 
-    public IReadOnlyList<string> OutputPaths => _outputPaths;
+    /// <summary>Gets the selected Windows endpoint identifier.</summary>
+    public string? SelectedDeviceId => _selectedDeviceId;
 
-    public string AvailabilityMessage =>
-        string.IsNullOrWhiteSpace(_selectedDeviceName)
-            ? BuildUnavailableMessage()
-            : $"系统声音将通过 “{_selectedDeviceName}” 通过 WASAPI 回录采集。";
+    /// <inheritdoc />
+    public IReadOnlyList<AudioCaptureSegment> OutputSegments => _outputSegments;
 
+    /// <inheritdoc />
+    public event EventHandler<AudioCaptureFailedEventArgs>? CaptureFailed;
+
+    /// <inheritdoc />
+    public string AvailabilityMessage => IsSupported
+        ? "系统声音将使用 WASAPI 回环采集，无需启用立体声混音。"
+        : $"WASAPI 回环采集不可用：{_availabilityError ?? "Windows 未检测到活动的音频输出设备。"}";
+
+    /// <inheritdoc />
     public void RefreshAvailability()
     {
-        _selectedDeviceName = null;
         _availableDevices.Clear();
+        _selectedDeviceId = null;
+        _selectedDeviceName = null;
+        _availabilityError = null;
 
         try
         {
             using var enumerator = new MMDeviceEnumerator();
-            var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
-            _availableDevices.AddRange(devices.Select(d => d.FriendlyName).OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase));
-            _selectedDeviceName = _availableDevices.FirstOrDefault();
+            var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).ToList();
+            using var defaultEndpoint = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+
+            _selectedDeviceId = defaultEndpoint.ID;
+            _selectedDeviceName = defaultEndpoint.FriendlyName;
+            _availableDevices.Add(_selectedDeviceName);
+            _availableDevices.AddRange(endpoints
+                .Where(endpoint => !string.Equals(endpoint.ID, _selectedDeviceId, StringComparison.OrdinalIgnoreCase))
+                .Select(endpoint => endpoint.FriendlyName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase));
+            foreach (var endpoint in endpoints)
+                endpoint.Dispose();
         }
-        catch
+        catch (Exception ex)
         {
+            _availabilityError = ex.Message;
             _availableDevices.Clear();
+            _selectedDeviceId = null;
+            _selectedDeviceName = null;
         }
     }
 
-    public void Start(string outputPath)
+    /// <inheritdoc />
+    public void Start(string outputPath, TimeSpan timelineOffset = default)
     {
-        if (!IsSupported)
-        {
-            throw new InvalidOperationException(AvailabilityMessage);
-        }
-
+        if (string.IsNullOrWhiteSpace(outputPath))
+            throw new ArgumentException("An output path is required.", nameof(outputPath));
         if (_capture is not null)
-        {
             throw new InvalidOperationException("系统声音采集已经启动。");
-        }
 
-        _baseOutputPath = outputPath;
-        _outputPaths.Clear();
+        if (!IsSupported)
+            RefreshAvailability();
+        if (!IsSupported)
+            throw new InvalidOperationException(AvailabilityMessage);
+
+        _baseOutputPath = Path.GetFullPath(outputPath);
+        _outputSegments.Clear();
         _segmentIndex = 0;
         _isPaused = false;
-        StartSegment();
+        Interlocked.Exchange(ref _failureRaised, 0);
+        StartSegment(timelineOffset);
     }
 
+    /// <inheritdoc />
     public void Pause()
     {
         if (_capture is null)
         {
+            _isPaused = true;
             return;
         }
 
-        _capture.StopRecording();
-        _capture.Dispose();
-        _capture = null;
-        _waveWriter?.Dispose();
-        _waveWriter = null;
+        StopCurrentSegment();
         _isPaused = true;
     }
 
-    public void Resume()
+    /// <inheritdoc />
+    public void Resume(TimeSpan timelineOffset = default)
     {
-        if (!_isPaused || _capture is not null || string.IsNullOrWhiteSpace(_baseOutputPath) || !IsSupported)
-        {
+        if (!_isPaused || _capture is not null || string.IsNullOrWhiteSpace(_baseOutputPath))
             return;
-        }
+
+        RefreshAvailability();
+        if (!IsSupported)
+            throw new InvalidOperationException(AvailabilityMessage);
 
         _segmentIndex++;
-        _isPaused = false;
-        StartSegment();
+        Interlocked.Exchange(ref _failureRaised, 0);
+        try
+        {
+            StartSegment(timelineOffset);
+            _isPaused = false;
+        }
+        catch
+        {
+            _isPaused = true;
+            throw;
+        }
     }
 
+    /// <inheritdoc />
     public void Stop()
     {
-        if (_capture is not null)
-        {
-            _capture.StopRecording();
-            _capture.Dispose();
-            _capture = null;
-        }
-
-        _waveWriter?.Dispose();
-        _waveWriter = null;
+        StopCurrentSegment();
         _isPaused = false;
+        _baseOutputPath = null;
     }
 
+    /// <summary>Releases capture threads, endpoint handles, and file resources.</summary>
     public void Dispose()
     {
-        Stop();
+        try
+        {
+            Stop();
+        }
+        finally
+        {
+            _recordingStopped?.Dispose();
+            _recordingStopped = null;
+            _stopCompleted.Dispose();
+        }
     }
 
-    private void StartSegment()
+    private void StartSegment(TimeSpan timelineOffset)
     {
-        if (string.IsNullOrWhiteSpace(_baseOutputPath))
-        {
-            throw new InvalidOperationException("系统声音输出路径未初始化。");
-        }
+        if (string.IsNullOrWhiteSpace(_baseOutputPath) || string.IsNullOrWhiteSpace(_selectedDeviceId))
+            throw new InvalidOperationException("系统声音输出路径或播放设备尚未初始化。");
 
         var outputPath = BuildSegmentOutputPath(_baseOutputPath, _segmentIndex);
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? AppContext.BaseDirectory);
 
-        using var enumerator = new MMDeviceEnumerator();
-        MMDevice? device = null;
-        if (!string.IsNullOrWhiteSpace(_selectedDeviceName))
+        try
         {
-            device = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
-                .FirstOrDefault(d => string.Equals(d.FriendlyName, _selectedDeviceName, StringComparison.OrdinalIgnoreCase));
+            using var enumerator = new MMDeviceEnumerator();
+            try
+            {
+                _device = enumerator.GetDevice(_selectedDeviceId);
+            }
+            catch
+            {
+                _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                _selectedDeviceId = _device.ID;
+                _selectedDeviceName = _device.FriendlyName;
+            }
+            if (_device.State != DeviceState.Active)
+            {
+                _device.Dispose();
+                _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                _selectedDeviceId = _device.ID;
+                _selectedDeviceName = _device.FriendlyName;
+            }
+
+            _capture = new WasapiLoopbackCapture(_device);
+            _waveWriter = new WaveFileWriter(outputPath, _capture.WaveFormat);
+            _recordingStopped?.Dispose();
+            _recordingStopped = new ManualResetEventSlim(false);
+            _stopRequested = false;
+            _capture.DataAvailable += OnDataAvailable;
+            _capture.RecordingStopped += OnRecordingStopped;
+            _capture.StartRecording();
+            _outputSegments.Add(new AudioCaptureSegment(outputPath, timelineOffset < TimeSpan.Zero ? TimeSpan.Zero : timelineOffset));
+        }
+        catch
+        {
+            try { ReleaseCaptureResources(); }
+            finally { TryDeleteFile(outputPath); }
+            throw;
+        }
+    }
+
+    private void StopCurrentSegment()
+    {
+        _stopCompleted.Reset();
+        if (Interlocked.CompareExchange(ref _stopInProgress, 1, 0) != 0)
+        {
+            _stopCompleted.Wait(StopTimeout);
+            return;
         }
 
-        if (device is null)
+        var capture = _capture;
+        if (capture is null)
         {
-            device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            try { ReleaseCaptureResources(); }
+            finally
+            {
+                Interlocked.Exchange(ref _stopInProgress, 0);
+                _stopCompleted.Set();
+            }
+            return;
         }
 
-        if (device is null)
+        _stopRequested = true;
+        try
         {
-            throw new InvalidOperationException("无法获取默认音频输出设备，请检查音频驱动是否正常。");
+            if (_recordingStopped?.IsSet != true)
+                capture.StopRecording();
+            if (_recordingStopped is not null && !_recordingStopped.Wait(StopTimeout))
+                throw new TimeoutException("WASAPI 回环采集在五秒内未能确认停止。");
         }
-
-        _capture = new WasapiLoopbackCapture(device);
-        _waveWriter = new WaveFileWriter(outputPath, _capture.WaveFormat);
-        _capture.DataAvailable += OnDataAvailable;
-        _capture.RecordingStopped += OnRecordingStopped;
-        _outputPaths.Add(outputPath);
-        _capture.StartRecording();
+        finally
+        {
+            try
+            {
+                ReleaseCaptureResources();
+            }
+            finally
+            {
+                _stopRequested = false;
+                _stopCompleted.Set();
+                Interlocked.Exchange(ref _stopInProgress, 0);
+            }
+        }
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
         try
         {
-            _waveWriter?.Write(e.Buffer, 0, e.BytesRecorded);
+            if (e.BytesRecorded > 0)
+                _waveWriter?.Write(e.Buffer, 0, e.BytesRecorded);
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore write failures to avoid crashing the audio callback thread.
+            ReportFailure(ex);
+            if (_capture is not null)
+            {
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { StopCurrentSegment(); }
+                    catch (Exception stopException) { ReportFailure(stopException); }
+                });
+            }
         }
     }
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)
     {
+        _recordingStopped?.Set();
         if (e.Exception is not null)
         {
-            // Ensure writer is closed on unexpected stop; the exception will be available to the caller via logs or next operation.
+            ReportFailure(e.Exception);
+            return;
+        }
+
+        if (!_stopRequested)
+            ReportFailure(new InvalidOperationException("WASAPI 回环采集意外停止，视频录制将继续，但不再包含系统声音。"));
+    }
+
+    private void ReportFailure(Exception exception)
+    {
+        if (Interlocked.Exchange(ref _failureRaised, 1) != 0)
+            return;
+
+        try
+        {
+            CaptureFailed?.Invoke(this, new AudioCaptureFailedEventArgs("系统声音", exception));
+        }
+        catch
+        {
+            // An observer must not be allowed to crash the native audio callback thread.
+        }
+    }
+
+    private void ReleaseCaptureResources()
+    {
+        var capture = _capture;
+        _capture = null;
+        try
+        {
+            if (capture is not null)
+            {
+                capture.DataAvailable -= OnDataAvailable;
+                capture.RecordingStopped -= OnRecordingStopped;
+                capture.Dispose();
+            }
+        }
+        finally
+        {
+            try
+            {
+                _waveWriter?.Dispose();
+            }
+            finally
+            {
+                _waveWriter = null;
+                _device?.Dispose();
+                _device = null;
+            }
         }
     }
 
     private static string BuildSegmentOutputPath(string outputPath, int segmentIndex)
     {
         if (segmentIndex == 0)
-        {
             return outputPath;
-        }
 
         var directory = Path.GetDirectoryName(outputPath) ?? AppContext.BaseDirectory;
         var fileName = Path.GetFileNameWithoutExtension(outputPath);
@@ -187,15 +354,14 @@ public sealed class WasapiLoopbackCaptureService : IAudioCaptureService
         return Path.Combine(directory, $"{fileName}-{segmentIndex:D2}{extension}");
     }
 
-    private string BuildUnavailableMessage()
+    private static void TryDeleteFile(string path)
     {
-        if (_availableDevices.Count == 0)
+        try
         {
-            return "当前没有枚举到可用于 WASAPI 回录的音频输出设备。";
+            if (File.Exists(path))
+                File.Delete(path);
         }
-
-        var preview = string.Join("、", _availableDevices.Take(3));
-        var suffix = _availableDevices.Count > 3 ? " 等设备。" : "。";
-        return $"当前枚举到 {preview}{suffix}";
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 }

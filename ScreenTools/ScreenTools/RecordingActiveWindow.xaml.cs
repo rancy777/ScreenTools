@@ -1,38 +1,52 @@
+using System;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Shapes;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Presents the active recording controls and runtime information.
+/// </summary>
 public partial class RecordingActiveWindow : Window
 {
     private RecordingSessionState? _session;
     private RecordingService? _recordingService;
 
+    /// <summary>
+    /// Initializes the active-recording window and its command bindings.
+    /// </summary>
     public RecordingActiveWindow()
     {
         InitializeComponent();
+        LocalizationManager.RegisterWindow(this);
     }
 
+    /// <summary>
+    /// Connects the window to the shared session settings and their change notifications.
+    /// </summary>
     public void BindSession(RecordingSessionState session)
     {
         _session = session;
     }
 
+    /// <summary>
+    /// Connects the active-recording window to recording lifecycle and runtime information.
+    /// </summary>
     public void BindRecordingService(RecordingService recordingService)
     {
         _recordingService = recordingService;
         _recordingService.ElapsedChanged += (_, elapsed) =>
         {
-            ElapsedTimeText.Text = elapsed.ToString(@"hh\:mm\:ss");
+            RunOnUiThread(() => ElapsedTimeText.Text = elapsed.ToString(@"hh\:mm\:ss"));
         };
         _recordingService.StatusChanged += (_, status) =>
         {
-            UpdateStatus(status);
+            RunOnUiThread(() => UpdateStatus(status));
         };
         _recordingService.RuntimeInfoChanged += (_, _) =>
         {
-            UpdateRuntimeInfo();
+            RunOnUiThread(UpdateRuntimeInfo);
         };
         UpdateRuntimeInfo();
     }
@@ -44,19 +58,25 @@ public partial class RecordingActiveWindow : Window
 
     private void StopRecording_Click(object sender, MouseButtonEventArgs e)
     {
-        ((App)Application.Current).WindowFlow.StopRecording();
+        _ = ((App)Application.Current).WindowFlow.StopRecordingAsync();
     }
 
     private void UpdateStatus(RecordingStatus status)
     {
-        Title = status switch
+        var title = status switch
         {
-            RecordingStatus.Recording when _session is not null => $"Recording Active HUD - {_session.QualityPreset}",
-            RecordingStatus.Paused when _session is not null => $"Recording Active HUD - Paused - {_session.QualityPreset}",
-            RecordingStatus.Paused => "Recording Active HUD - Paused",
-            RecordingStatus.Recording => "Recording Active HUD",
-            _ => "Recording Active HUD"
+            RecordingStatus.Finalizing => "正在完成录制",
+            RecordingStatus.Recording when _session is not null => $"录制状态栏 - {_session.QualityPreset}",
+            RecordingStatus.Paused when _session is not null => $"录制状态栏 - 已暂停 - {_session.QualityPreset}",
+            RecordingStatus.Paused => "录制状态栏 - 已暂停",
+            _ => "录制状态栏"
         };
+        Title = LocalizationManager.Translate(title);
+        var canControlRecording = status is RecordingStatus.Recording or RecordingStatus.Paused;
+        PauseButton.IsEnabled = canControlRecording;
+        StopButton.IsEnabled = canControlRecording;
+        PauseButton.Opacity = canControlRecording ? 1.0 : 0.45;
+        StopButton.Opacity = canControlRecording ? 1.0 : 0.45;
 
         ElapsedTimeText.Text = _recordingService?.Elapsed.ToString(@"hh\:mm\:ss") ?? "00:00:00";
 
@@ -68,8 +88,16 @@ public partial class RecordingActiveWindow : Window
 
     private void UpdateRuntimeInfo()
     {
-        ActiveAudioSummaryText.Text = _recordingService?.CurrentAudioSummary ?? "等待开始录制";
-        ActiveOutputSummaryText.Text = _recordingService?.CurrentOutputSummary
-            ?? (_session is null ? "尚未开始" : $"{_session.QualityPreset} · 输出到 设置目录");
+        ActiveAudioSummaryText.Text = LocalizationManager.Translate(_recordingService?.CurrentAudioSummary ?? "等待开始录制");
+        ActiveOutputSummaryText.Text = LocalizationManager.Translate(_recordingService?.CurrentOutputSummary
+            ?? (_session is null ? "尚未开始" : $"{_session.QualityPreset} · 输出到 设置目录"));
+    }
+
+    private void RunOnUiThread(Action action)
+    {
+        if (Dispatcher.CheckAccess())
+            action();
+        else if (!Dispatcher.HasShutdownStarted && !Dispatcher.HasShutdownFinished)
+            Dispatcher.BeginInvoke(action);
     }
 }

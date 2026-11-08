@@ -1,14 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Coordinates application windows, capture workflows, services, and orderly shutdown.
+/// </summary>
 public sealed class WindowFlowCoordinator
 {
     private readonly App _app;
@@ -31,9 +36,19 @@ public sealed class WindowFlowCoordinator
     private ScreenshotActionToastWindow? _screenshotActionToastWindow;
     private GlobalHotKeyManager? _hotKeyManager;
     private bool _isSavingReplay;
+    private bool _isShuttingDown;
+    /// <summary>
+    /// Gets the shared session settings used by the application workflows.
+    /// </summary>
     public RecordingSessionState Session { get; }
+    /// <summary>
+    /// Gets the service responsible for recording capture and finalization.
+    /// </summary>
     public RecordingService RecordingService { get; }
 
+    /// <summary>
+    /// Creates application services, loads persisted settings, and prepares the window workflow.
+    /// </summary>
     public WindowFlowCoordinator(App app)
     {
         _app = app;
@@ -49,7 +64,16 @@ public sealed class WindowFlowCoordinator
         _statusService = new AppStatusService();
         _sessionPersistenceService = new SessionPersistenceService();
         _startupLaunchService = new StartupLaunchService();
+        _sessionPersistenceService.PersistenceFailed += (_, exception) =>
+            _statusService.SetStatus(LocalizationManager.Translate($"设置保存失败：{exception.Message}"), AppStatusLevel.Warning);
+        _sessionPersistenceService.SessionCorrupted += (_, _) =>
+            _statusService.SetStatus(LocalizationManager.Translate("设置文件已损坏，已隔离损坏文件并恢复默认设置。"), AppStatusLevel.Warning);
+        _outputHistoryService.PersistenceFailed += (_, exception) =>
+            _statusService.SetStatus(LocalizationManager.Translate($"输出历史记录保存失败：{exception.Message}"), AppStatusLevel.Warning);
+        _clipboardManagerService.PersistenceFailed += (_, exception) =>
+            _statusService.SetStatus(LocalizationManager.Translate($"剪贴板历史记录保存失败：{exception.Message}"), AppStatusLevel.Warning);
         Session = _sessionPersistenceService.Load();
+        LocalizationManager.SetLanguage(Session.Language);
         _replayBufferService = new ReplayBufferService(_screenCaptureService, _frameSequenceEncoder, Session);
         _lastLaunchAtStartupState = _startupLaunchService.IsEnabled();
         Session.LaunchAtStartup = _lastLaunchAtStartupState;
@@ -63,6 +87,9 @@ public sealed class WindowFlowCoordinator
         Session.StateChanged += OnSessionStateChanged;
     }
 
+    /// <summary>
+    /// Shows and activates the main application workspace.
+    /// </summary>
     public void ShowMainWindow()
     {
         EnsureMainWindow();
@@ -74,6 +101,9 @@ public sealed class WindowFlowCoordinator
         _mainWindow.Activate();
     }
 
+    /// <summary>
+    /// Shows and activates the compact recording heads-up display.
+    /// </summary>
     public void ShowRecordingHud()
     {
         EnsureRecordingHudWindow();
@@ -82,9 +112,13 @@ public sealed class WindowFlowCoordinator
         _recordingActiveWindow?.Hide();
 
         _recordingHudWindow!.Show();
+        MonitorWindowPlacement.PlaceOnCursorMonitor(_recordingHudWindow, MonitorWindowAlignment.Center);
         _recordingHudWindow.Activate();
     }
 
+    /// <summary>
+    /// Starts a recording and switches to the active-recording window.
+    /// </summary>
     public void StartRecording()
     {
         if (RecordingService.Status != RecordingStatus.Idle)
@@ -102,22 +136,49 @@ public sealed class WindowFlowCoordinator
         _recordingActiveWindow.Activate();
     }
 
-    public void StopRecording()
+    /// <summary>
+    /// Finalizes the active recording, reports its output, and returns to the recording HUD.
+    /// </summary>
+    public async Task StopRecordingAsync()
     {
-        HandleRecordingStop(saveOutput: true);
+        try
+        {
+            await HandleRecordingStopAsync(saveOutput: true);
+        }
+        catch (Exception ex)
+        {
+            var message = LocalizationManager.Translate(ex.Message);
+            _statusService.SetStatus(message, AppStatusLevel.Error);
+            MessageBox.Show(message, "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
         ShowRecordingHud();
     }
 
-    public void ExitToSettings()
+    /// <summary>
+    /// Stops an active recording before returning to the main settings window.
+    /// </summary>
+    public async Task ExitToSettingsAsync()
     {
         if (RecordingService.Status != RecordingStatus.Idle)
         {
-            HandleRecordingStop(saveOutput: true);
+            try
+            {
+                await HandleRecordingStopAsync(saveOutput: true);
+            }
+            catch (Exception ex)
+            {
+                var message = LocalizationManager.Translate(ex.Message);
+                _statusService.SetStatus(message, AppStatusLevel.Error);
+                MessageBox.Show(message, "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
         ShowMainWindow();
     }
 
-    public void ToggleRecording()
+    /// <summary>
+    /// Starts recording when idle or stops and finalizes the current recording.
+    /// </summary>
+    public async Task ToggleRecordingAsync()
     {
         if (RecordingService.Status == RecordingStatus.Idle)
         {
@@ -125,14 +186,17 @@ public sealed class WindowFlowCoordinator
             return;
         }
 
-        StopRecording();
+        await StopRecordingAsync();
     }
 
-    public void CaptureScreenshot()
+    /// <summary>
+    /// Captures the configured screenshot target and writes the resulting artifact.
+    /// </summary>
+    public async Task CaptureScreenshotAsync()
     {
-        ExecuteSafely(() =>
+        try
         {
-            var artifact = CaptureScreenshotArtifact();
+            var artifact = await CaptureScreenshotArtifactAsync();
             if (artifact is null)
             {
                 _statusService.SetStatus("已取消截图。", AppStatusLevel.Info);
@@ -141,11 +205,23 @@ public sealed class WindowFlowCoordinator
 
             _outputHistoryService.Add(artifact);
             HandleScreenshotPresentation(artifact);
-            PublishArtifactStatus(artifact, TryCopyScreenshotToClipboard(artifact));
-        });
+            // Clipboard APIs require the WPF UI thread; the expensive capture and image
+            // encoding have already completed off-thread.
+            var clipboardResult = TryCopyScreenshotToClipboard(artifact);
+            PublishArtifactStatus(artifact, clipboardResult);
+        }
+        catch (Exception ex)
+        {
+            var message = LocalizationManager.Translate(ex.Message);
+            _statusService.SetStatus(message, AppStatusLevel.Error);
+            MessageBox.Show(message, "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
-    public async void SaveReplay()
+    /// <summary>
+    /// Exports the prepared replay frames and returns the resulting capture artifact.
+    /// </summary>
+    public async Task SaveReplayAsync(CancellationToken cancellationToken = default)
     {
         if (_isSavingReplay)
         {
@@ -159,26 +235,33 @@ public sealed class WindowFlowCoordinator
             return;
         }
 
-        var export = _replayBufferService.PrepareReplayExport(Session);
-        if (export is null)
-        {
-            _statusService.SetStatus("当前还没有足够的回录缓存。", AppStatusLevel.Warning);
-            return;
-        }
-
         _isSavingReplay = true;
-        _statusService.SetStatus("正在后台导出回录，仅保存画面。", AppStatusLevel.Info);
 
         try
         {
-            var artifact = await Task.Run(() => _replayBufferService.SaveReplay(export));
+            var export = await Task.Run(
+                () => _replayBufferService.PrepareReplayExport(Session),
+                cancellationToken);
+            if (export is null)
+            {
+                _statusService.SetStatus("当前还没有足够的回录缓存。", AppStatusLevel.Warning);
+                return;
+            }
+
+            _statusService.SetStatus("正在后台导出回录，仅保存画面。", AppStatusLevel.Info);
+            var artifact = await _replayBufferService.SaveReplayAsync(export, cancellationToken);
             _outputHistoryService.Add(artifact);
             PublishArtifactStatus(artifact);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _statusService.SetStatus(LocalizationManager.Translate("回放导出已取消，回放缓存仍然可用。"), AppStatusLevel.Info);
+        }
         catch (Exception ex)
         {
-            _statusService.SetStatus(ex.Message, AppStatusLevel.Error);
-            MessageBox.Show(ex.Message, "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
+            var message = LocalizationManager.Translate(ex.Message);
+            _statusService.SetStatus(message, AppStatusLevel.Error);
+            MessageBox.Show(message, "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -201,19 +284,27 @@ public sealed class WindowFlowCoordinator
         _mainWindow.BindSystemAudioCapture(_systemAudioCaptureService);
         _hotKeyManager = new GlobalHotKeyManager(_mainWindow, Session);
         _hotKeyManager.HotKeyPressed += OnHotKeyPressed;
-        _mainWindow.Closed += (_, _) =>
+        _mainWindow.Closed += async (_, _) =>
         {
-            if (RecordingService.Status != RecordingStatus.Idle)
+            _isShuttingDown = true;
+            try
             {
-                RecordingService.Abort();
+                await RecordingService.AbortAsync();
+                await _replayBufferService.StopAsync(clearFrames: true);
             }
-
-            _recordingHudWindow?.Close();
-            _recordingActiveWindow?.Close();
-            _screenshotActionToastWindow?.Close();
-            CloseStickerWindows();
-            _hotKeyManager?.Dispose();
-            _app.Shutdown();
+            catch (Exception ex)
+            {
+                _statusService.SetStatus(LocalizationManager.Translate($"关闭应用时清理失败：{ex.Message}"), AppStatusLevel.Warning);
+            }
+            finally
+            {
+                _recordingHudWindow?.Close();
+                _recordingActiveWindow?.Close();
+                _screenshotActionToastWindow?.Close();
+                CloseStickerWindows();
+                _hotKeyManager?.Dispose();
+                _app.Shutdown();
+            }
         };
     }
 
@@ -231,6 +322,7 @@ public sealed class WindowFlowCoordinator
         {
             _recordingHudWindow = null;
         };
+        _recordingHudWindow.Closing += OnRecordingHudClosing;
     }
 
     private void EnsureRecordingActiveWindow()
@@ -247,11 +339,53 @@ public sealed class WindowFlowCoordinator
         {
             _recordingActiveWindow = null;
         };
+        _recordingActiveWindow.Closing += OnRecordingActiveWindowClosing;
+    }
+
+    private void OnRecordingActiveWindowClosing(object? sender, CancelEventArgs e)
+    {
+        if (_isShuttingDown || RecordingService.Status == RecordingStatus.Idle)
+            return;
+
+        // Closing the compact control window must not leave an active recording
+        // running invisibly. Route the user to the HUD instead.
+        e.Cancel = true;
+        _recordingActiveWindow?.Hide();
+        ShowRecordingHud();
+    }
+
+    private void OnRecordingHudClosing(object? sender, CancelEventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        // Keep a visible control surface available while recording. When idle,
+        // closing the HUD simply returns to the main workspace.
+        e.Cancel = true;
+        _recordingHudWindow?.Hide();
+        if (RecordingService.Status is RecordingStatus.Recording or RecordingStatus.Paused or RecordingStatus.Finalizing)
+        {
+            EnsureRecordingActiveWindow();
+            _recordingActiveWindow!.Show();
+            _recordingActiveWindow.Activate();
+        }
+        else
+        {
+            ShowMainWindow();
+        }
     }
 
     private void OnSessionStateChanged(object? sender, EventArgs e)
     {
+        if (!_app.Dispatcher.CheckAccess())
+        {
+            if (!_app.Dispatcher.HasShutdownStarted && !_app.Dispatcher.HasShutdownFinished)
+                _app.Dispatcher.BeginInvoke(new Action(() => OnSessionStateChanged(sender, e)));
+            return;
+        }
+
         ExecuteSafely(() => _sessionPersistenceService.Save(Session));
+        LocalizationManager.SetLanguage(Session.Language);
 
         if (Session.LaunchAtStartup == _lastLaunchAtStartupState)
         {
@@ -265,6 +399,9 @@ public sealed class WindowFlowCoordinator
         });
     }
 
+    /// <summary>
+    /// Temporarily suspends or resumes global shortcut handling.
+    /// </summary>
     public void SetShortcutCaptureSuspended(bool suspended)
     {
         if (_hotKeyManager is not null)
@@ -273,24 +410,34 @@ public sealed class WindowFlowCoordinator
         }
     }
 
+    /// <summary>
+    /// Closes every screenshot sticker window currently displayed.
+    /// </summary>
     public void CloseAllScreenshotStickers()
     {
         CloseStickerWindows();
     }
 
-    private void OnHotKeyPressed(object? sender, ShortcutAction action)
+    private async void OnHotKeyPressed(object? sender, ShortcutAction action)
     {
-        switch (action)
+        try
         {
-            case ShortcutAction.Screenshot:
-                CaptureScreenshot();
-                break;
-            case ShortcutAction.Recording:
-                ToggleRecording();
-                break;
-            case ShortcutAction.Replay:
-                SaveReplay();
-                break;
+            switch (action)
+            {
+                case ShortcutAction.Screenshot:
+                    await CaptureScreenshotAsync();
+                    break;
+                case ShortcutAction.Recording:
+                    await ToggleRecordingAsync();
+                    break;
+                case ShortcutAction.Replay:
+                    await SaveReplayAsync();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _statusService.SetStatus(LocalizationManager.Translate(ex.Message), AppStatusLevel.Error);
         }
     }
 
@@ -302,11 +449,15 @@ public sealed class WindowFlowCoordinator
         }
         catch (Exception ex)
         {
-            _statusService.SetStatus(ex.Message, AppStatusLevel.Error);
-            MessageBox.Show(ex.Message, "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
+            var message = LocalizationManager.Translate(ex.Message);
+            _statusService.SetStatus(message, AppStatusLevel.Error);
+            MessageBox.Show(message, "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
+    /// <summary>
+    /// Copies the specified image to the clipboard and publishes the result as application status.
+    /// </summary>
     public ClipboardCopyResult CopyImageToClipboard(string imagePath, string kind = "截图")
     {
         var result = _clipboardManagerService.CopyImageFromFile(imagePath, kind);
@@ -348,15 +499,15 @@ public sealed class WindowFlowCoordinator
         _statusService.SetStatus(message, level);
     }
 
-    private CaptureArtifact? HandleRecordingStop(bool saveOutput)
+    private async Task<CaptureArtifact?> HandleRecordingStopAsync(bool saveOutput)
     {
         if (!saveOutput)
         {
-            RecordingService.Abort();
+            await RecordingService.AbortAsync();
             return null;
         }
 
-        var artifact = RecordingService.Stop();
+        var artifact = await RecordingService.StopAsync();
         if (artifact is null)
         {
             return null;
@@ -367,35 +518,44 @@ public sealed class WindowFlowCoordinator
         return artifact;
     }
 
-    private CaptureArtifact? CaptureScreenshotArtifact()
+    private async Task<CaptureArtifact?> CaptureScreenshotArtifactAsync()
     {
-        return Session.ScreenshotCaptureMode switch
+        if (Session.ScreenshotCaptureMode == ScreenshotCaptureMode.Region)
         {
-            ScreenshotCaptureMode.Region => CaptureRegionScreenshot(),
-            _ => _screenCaptureService.CaptureScreenshot(Session)
-        };
+            return await CaptureRegionScreenshotAsync();
+        }
+
+        var session = CreateScreenshotSessionSnapshot();
+        return await Task.Run(() => _screenCaptureService.CaptureScreenshot(session));
     }
 
-    private CaptureArtifact? CaptureRegionScreenshot()
+    private async Task<CaptureArtifact?> CaptureRegionScreenshotAsync()
     {
         var hiddenWindows = HideAppWindowsForCapture();
         try
         {
-            Thread.Sleep(120);
-            var selector = new RegionSelectionWindow();
-            var confirmed = selector.ShowDialog();
-            if (confirmed != true || selector.SelectedRegion is null)
+            await Task.Delay(120);
+            var selectedRegion = await RegionSelectionWindow.SelectRegionAsync();
+            if (selectedRegion is null)
             {
                 return null;
             }
 
-            return _screenCaptureService.CaptureScreenshotRegion(Session, selector.SelectedRegion.Value);
+            var session = CreateScreenshotSessionSnapshot();
+            var region = selectedRegion.Value;
+            return await Task.Run(() => _screenCaptureService.CaptureScreenshotRegion(session, region));
         }
         finally
         {
             RestoreHiddenWindows(hiddenWindows);
         }
     }
+
+    private RecordingSessionState CreateScreenshotSessionSnapshot() => new()
+    {
+        ScreenshotFormat = Session.ScreenshotFormat,
+        OutputDirectory = Session.OutputDirectory
+    };
 
     private void HandleScreenshotPresentation(CaptureArtifact artifact)
     {
@@ -428,14 +588,12 @@ public sealed class WindowFlowCoordinator
         }
 
         var offset = 32 * _stickerWindows.Count;
-        var position = new Point(
-            SystemParameters.WorkArea.Right - 460 - offset,
-            SystemParameters.WorkArea.Top + 96 + offset);
-        var window = new ScreenshotStickerWindow(artifact.OutputPath, position);
+        var window = new ScreenshotStickerWindow(artifact.OutputPath, new Point(0, 0));
         window.CloseAllRequested += (_, _) => CloseStickerWindows();
         window.Closed += (_, _) => _stickerWindows.Remove(window);
         _stickerWindows.Add(window);
         window.Show();
+        MonitorWindowPlacement.PlaceOnCursorMonitor(window, MonitorWindowAlignment.TopRight, margin: 24, offset: offset);
     }
 
     private void ShowScreenshotActionToast(CaptureArtifact artifact)
@@ -446,13 +604,11 @@ public sealed class WindowFlowCoordinator
         }
 
         _screenshotActionToastWindow?.Close();
-        var position = new Point(
-            SystemParameters.WorkArea.Right - 400,
-            SystemParameters.WorkArea.Bottom - 160);
-        _screenshotActionToastWindow = new ScreenshotActionToastWindow(artifact.OutputPath, position);
+        _screenshotActionToastWindow = new ScreenshotActionToastWindow(artifact.OutputPath, new Point(0, 0));
         _screenshotActionToastWindow.ActionRequested += (_, action) => HandleScreenshotQuickAction(action, artifact);
         _screenshotActionToastWindow.Closed += (_, _) => _screenshotActionToastWindow = null;
         _screenshotActionToastWindow.Show();
+        MonitorWindowPlacement.PlaceOnCursorMonitor(_screenshotActionToastWindow, MonitorWindowAlignment.BottomRight);
     }
 
     private void HandleScreenshotQuickAction(ScreenshotQuickAction action, CaptureArtifact artifact)

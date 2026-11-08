@@ -4,21 +4,39 @@ using System.Linq;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Represents a keyboard shortcut as normalized key tokens.
+/// </summary>
 public sealed class ShortcutGesture
 {
     private static readonly string[] ModifierOrder = ["Ctrl", "Alt", "Shift", "Win"];
 
+    /// <summary>
+    /// Gets or sets the normalized key tokens that make up this shortcut gesture.
+    /// </summary>
     public List<string> Tokens { get; set; } = [];
 
+    /// <summary>
+    /// Gets whether this shortcut gesture contains no key tokens.
+    /// </summary>
     public bool IsEmpty => Tokens.Count == 0;
 
+    /// <summary>
+    /// Gets a human-readable representation of the shortcut tokens.
+    /// </summary>
     public string DisplayText => IsEmpty ? "未设置" : string.Join(" + ", Tokens);
 
+    /// <summary>
+    /// Determines whether the supplied pressed-key set matches this shortcut gesture.
+    /// </summary>
     public bool Matches(IReadOnlySet<string> pressedTokens)
     {
         return Tokens.Count > 0 && Tokens.All(pressedTokens.Contains);
     }
 
+    /// <summary>
+    /// Creates an independent copy of this shortcut gesture and its token list.
+    /// </summary>
     public ShortcutGesture Clone()
     {
         return new ShortcutGesture
@@ -27,6 +45,9 @@ public sealed class ShortcutGesture
         };
     }
 
+    /// <summary>
+    /// Creates the default shortcut gesture associated with the specified action.
+    /// </summary>
     public static ShortcutGesture CreateDefault(ShortcutAction action)
     {
         return action switch
@@ -38,11 +59,17 @@ public sealed class ShortcutGesture
         };
     }
 
+    /// <summary>
+    /// Creates a shortcut gesture from the supplied key tokens.
+    /// </summary>
     public static ShortcutGesture FromTokens(params string[] tokens)
     {
         return FromEnumerable(tokens);
     }
 
+    /// <summary>
+    /// Creates a shortcut gesture from an enumerable sequence of key tokens.
+    /// </summary>
     public static ShortcutGesture FromEnumerable(IEnumerable<string> tokens)
     {
         var normalized = tokens
@@ -59,6 +86,9 @@ public sealed class ShortcutGesture
         };
     }
 
+    /// <summary>
+    /// Reports whether a token represents a supported modifier key.
+    /// </summary>
     public static bool IsModifier(string token)
     {
         return ModifierOrder.Contains(token, StringComparer.OrdinalIgnoreCase);

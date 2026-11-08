@@ -12,6 +12,9 @@ using Forms = System.Windows.Forms;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Presents the main LensSnap workspace and binds application settings and history services.
+/// </summary>
 public partial class MainWindow : Window
 {
     private RecordingSessionState? _session;
@@ -37,42 +40,123 @@ public partial class MainWindow : Window
     private ShortcutAction? _capturingShortcutAction;
     private HashSet<string> _pendingShortcutTokens = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Initializes the main workspace, loads its controls, and registers it for live localization.
+    /// </summary>
     public MainWindow()
     {
         InitializeComponent();
+        LocalizationManager.RegisterWindow(this);
         Loaded += (_, _) => ResolveControlReferences();
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         PreviewMouseDown += MainWindow_PreviewMouseDown;
     }
 
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (ContentColumns is null || LeftColumn is null || RightColumn is null)
+            return;
+
+        // The content is capped at 900 px, so a window breakpoint near 820 px
+        // keeps two cards usable while allowing narrower windows to stack them.
+        var useSingleColumn = e.NewSize.Width < 820;
+        if (useSingleColumn)
+        {
+            ContentColumns.ColumnDefinitions.Clear();
+            ContentColumns.RowDefinitions.Clear();
+            ContentColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ContentColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ContentColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetColumn(LeftColumn, 0);
+            Grid.SetRow(LeftColumn, 0);
+            Grid.SetColumn(RightColumn, 0);
+            Grid.SetRow(RightColumn, 1);
+            LeftColumn.Margin = new Thickness(0);
+            RightColumn.Margin = new Thickness(0);
+        }
+        else
+        {
+            ContentColumns.RowDefinitions.Clear();
+            ContentColumns.ColumnDefinitions.Clear();
+            ContentColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ContentColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn(LeftColumn, 0);
+            Grid.SetRow(LeftColumn, 0);
+            Grid.SetColumn(RightColumn, 1);
+            Grid.SetRow(RightColumn, 0);
+            LeftColumn.Margin = new Thickness(0, 0, 8, 0);
+            RightColumn.Margin = new Thickness(8, 0, 0, 0);
+        }
+    }
+
+    private void LanguageButton_Click(object sender, RoutedEventArgs e)
+    {
+        LanguagePopup.IsOpen = !LanguagePopup.IsOpen;
+    }
+
+    private void SelectLanguage_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not string language || _session is null) return;
+        _session.Language = language;
+        LanguagePopup.IsOpen = false;
+        UpdateLanguageButton();
+    }
+
+    private void UpdateLanguageButton()
+    {
+        if (LanguageButton is null) return;
+        var label = LocalizationManager.CurrentLanguage switch
+        {
+            LocalizationManager.French => "Français",
+            LocalizationManager.Chinese => "简体中文",
+            _ => "English"
+        };
+        LanguageButton.Content = $"🌐  {label}  ▾";
+    }
+
+    /// <summary>
+    /// Connects the window to the shared session settings and their change notifications.
+    /// </summary>
     public void BindSession(RecordingSessionState session)
     {
         _session = session;
-        _session.StateChanged += (_, _) => ApplySessionState();
+        _session.StateChanged += (_, _) => RunOnUiThread(ApplySessionState);
         ApplySessionState();
     }
 
+    /// <summary>
+    /// Connects the main window to the recent-output history service.
+    /// </summary>
     public void BindOutputHistory(OutputHistoryService outputHistoryService)
     {
         _outputHistoryService = outputHistoryService;
-        _outputHistoryService.HistoryChanged += (_, _) => RenderRecentOutputs();
+        _outputHistoryService.HistoryChanged += (_, _) => RunOnUiThread(RenderRecentOutputs);
         RenderRecentOutputs();
     }
 
+    /// <summary>
+    /// Connects the main window to the clipboard-history service.
+    /// </summary>
     public void BindClipboardHistory(ClipboardManagerService clipboardManagerService)
     {
         _clipboardManagerService = clipboardManagerService;
-        _clipboardManagerService.HistoryChanged += (_, _) => RenderClipboardEntries();
+        _clipboardManagerService.HistoryChanged += (_, _) => RunOnUiThread(RenderClipboardEntries);
         RenderClipboardEntries();
     }
 
+    /// <summary>
+    /// Connects the window to the application status service.
+    /// </summary>
     public void BindStatus(AppStatusService statusService)
     {
         _statusService = statusService;
-        _statusService.StatusChanged += (_, _) => RenderStatus();
+        _statusService.StatusChanged += (_, _) => RunOnUiThread(RenderStatus);
         RenderStatus();
     }
 
+    /// <summary>
+    /// Connects the main window to system-audio device information and controls.
+    /// </summary>
     public void BindSystemAudioCapture(WasapiLoopbackCaptureService systemAudioCaptureService)
     {
         _systemAudioCaptureService = systemAudioCaptureService;
@@ -87,6 +171,7 @@ public partial class MainWindow : Window
         }
 
         _isSyncingFromSession = true;
+        UpdateLanguageButton();
 
         _screenshotFormatComboBox ??= FindDescendant<ComboBox>(ScreenshotFormatRow);
         _screenshotModeComboBox ??= FindDescendant<ComboBox>(ScreenshotModeRow);
@@ -384,7 +469,7 @@ public partial class MainWindow : Window
         };
         titleRow.Children.Add(new TextBlock
         {
-            Text = $"{entry.Kind}  {Path.GetFileName(entry.OutputPath)}",
+            Text = LocalizationManager.Translate($"{entry.Kind}  {Path.GetFileName(entry.OutputPath)}"),
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
             Foreground = (Brush)FindResource("HeadingBrush"),
@@ -395,7 +480,7 @@ public partial class MainWindow : Window
         infoStack.Children.Add(new TextBlock
         {
             Margin = new Thickness(0, 4, 0, 0),
-            Text = $"{entry.CreatedAt.LocalDateTime:MM-dd HH:mm:ss} · {entry.Detail}",
+            Text = LocalizationManager.Translate($"{entry.CreatedAt.LocalDateTime:MM-dd HH:mm:ss} · {entry.Detail}"),
             FontSize = 12,
             Foreground = (Brush)FindResource("SubtleTextBrush"),
             TextWrapping = TextWrapping.Wrap
@@ -456,7 +541,7 @@ public partial class MainWindow : Window
         var infoStack = new StackPanel();
         infoStack.Children.Add(new TextBlock
         {
-            Text = $"{entry.Kind}  {Path.GetFileName(entry.OutputPath)}",
+            Text = LocalizationManager.Translate($"{entry.Kind}  {Path.GetFileName(entry.OutputPath)}"),
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
             Foreground = (Brush)FindResource("HeadingBrush")
@@ -464,7 +549,7 @@ public partial class MainWindow : Window
         infoStack.Children.Add(new TextBlock
         {
             Margin = new Thickness(0, 4, 0, 0),
-            Text = $"{entry.CreatedAt.LocalDateTime:MM-dd HH:mm} · {GetEntrySummary(entry)}",
+            Text = LocalizationManager.Translate($"{entry.CreatedAt.LocalDateTime:MM-dd HH:mm} · {GetEntrySummary(entry)}"),
             FontSize = 12,
             Foreground = (Brush)FindResource("SubtleTextBrush")
         });
@@ -529,7 +614,7 @@ public partial class MainWindow : Window
 
         container.Child = new TextBlock
         {
-            Text = "无预览",
+            Text = LocalizationManager.Translate("无预览"),
             FontSize = 11,
             Foreground = (Brush)FindResource("SubtleTextBrush"),
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -550,7 +635,7 @@ public partial class MainWindow : Window
 
         chip.Child = new TextBlock
         {
-            Text = entry.CopySucceeded ? "已复制" : "复制失败",
+            Text = LocalizationManager.Translate(entry.CopySucceeded ? "已复制" : "复制失败"),
             FontSize = 10,
             FontWeight = FontWeights.SemiBold,
             Foreground = (Brush)new BrushConverter().ConvertFromString(entry.CopySucceeded ? "#FF005EB1" : "#FFB45309")!
@@ -562,7 +647,7 @@ public partial class MainWindow : Window
     {
         var button = new Button
         {
-            Content = content,
+            Content = LocalizationManager.Translate(content),
             Tag = path,
             Margin = margin ?? new Thickness(0),
             MinWidth = 72
@@ -665,8 +750,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatusMessageText.Text = _statusService.Message;
-        StatusMetaText.Text = $"{_statusService.UpdatedAt.LocalDateTime:MM-dd HH:mm:ss} · 最近状态";
+        StatusMessageText.Text = LocalizationManager.Translate(_statusService.Message);
+        StatusMetaText.Text = LocalizationManager.Translate($"{_statusService.UpdatedAt.LocalDateTime:MM-dd HH:mm:ss} · 最近状态");
 
         var (background, border, indicator) = _statusService.Level switch
         {
@@ -690,7 +775,7 @@ public partial class MainWindow : Window
 
         if (_systemAudioCaptureService is not null)
         {
-            SystemAudioRow.Description = _systemAudioCaptureService.AvailabilityMessage;
+            SystemAudioRow.Description = LocalizationManager.Translate(_systemAudioCaptureService.AvailabilityMessage);
         }
     }
 
@@ -708,10 +793,16 @@ public partial class MainWindow : Window
         }
 
         var preview = _pendingShortcutTokens.Count == 0
-            ? "请按下键盘或鼠标组合"
+            ? LocalizationManager.Translate("请按下键盘或鼠标组合")
             : ShortcutGesture.FromEnumerable(_pendingShortcutTokens).DisplayText;
-        ShortcutCaptureTitleText.Text = $"正在录入{GetActionLabel(_capturingShortcutAction.Value)}快捷键";
-        ShortcutCaptureHintText.Text = $"{preview} · Esc 取消 · Backspace 清空";
+        var actionLabel = LocalizationManager.Translate(GetActionLabel(_capturingShortcutAction.Value));
+        ShortcutCaptureTitleText.Text = LocalizationManager.CurrentLanguage switch
+        {
+            LocalizationManager.French => $"Enregistrement du raccourci {actionLabel}",
+            LocalizationManager.Chinese => $"正在录入{GetActionLabel(_capturingShortcutAction.Value)}快捷键",
+            _ => $"Recording {actionLabel} shortcut"
+        };
+        ShortcutCaptureHintText.Text = LocalizationManager.Translate($"{preview} · Esc 取消 · Backspace 清空");
         ShortcutCaptureBanner.Visibility = Visibility.Visible;
     }
 
@@ -1091,5 +1182,13 @@ public partial class MainWindow : Window
                 yield return nested;
             }
         }
+    }
+
+    private void RunOnUiThread(Action action)
+    {
+        if (Dispatcher.CheckAccess())
+            action();
+        else if (!Dispatcher.HasShutdownStarted && !Dispatcher.HasShutdownFinished)
+            Dispatcher.BeginInvoke(action);
     }
 }

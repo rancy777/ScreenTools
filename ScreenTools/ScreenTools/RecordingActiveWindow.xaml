@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Recording Active HUD"
+        Title="录制状态栏"
         Width="1110"
         Height="286"
         MinWidth="1110"
@@ -150,7 +150,8 @@
                     <Rectangle x:Name="PauseRightBar" Width="6" Height="18" Fill="#313A3E" RadiusX="2" RadiusY="2" HorizontalAlignment="Center" Margin="10,0,0,0" />
                 </Grid>
 
-                <Border Grid.Column="4"
+                <Border x:Name="StopButton"
+                        Grid.Column="4"
                         Width="78"
                         Height="78"
                         HorizontalAlignment="Center"

@@ -1,31 +1,45 @@
+using System;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Presents the compact recording heads-up display.
+/// </summary>
 public partial class RecordingHudWindow : Window
 {
     private RecordingSessionState? _session;
     private AppStatusService? _statusService;
     private bool _isSyncingFromSession;
 
+    /// <summary>
+    /// Initializes the compact recording heads-up display and its command bindings.
+    /// </summary>
     public RecordingHudWindow()
     {
         InitializeComponent();
+        LocalizationManager.RegisterWindow(this);
     }
 
+    /// <summary>
+    /// Connects the window to the shared session settings and their change notifications.
+    /// </summary>
     public void BindSession(RecordingSessionState session)
     {
         _session = session;
-        _session.StateChanged += (_, _) => ApplySessionState();
+        _session.StateChanged += (_, _) => RunOnUiThread(ApplySessionState);
         ApplySessionState();
     }
 
+    /// <summary>
+    /// Connects the window to the application status service.
+    /// </summary>
     public void BindStatus(AppStatusService statusService)
     {
         _statusService = statusService;
-        _statusService.StatusChanged += (_, _) => RenderStatus();
+        _statusService.StatusChanged += (_, _) => RunOnUiThread(RenderStatus);
         RenderStatus();
     }
 
@@ -58,8 +72,8 @@ public partial class RecordingHudWindow : Window
             return;
         }
 
-        HudStatusMessageText.Text = _statusService.Message;
-        HudStatusMetaText.Text = $"{_statusService.UpdatedAt.LocalDateTime:HH:mm:ss} · 最近状态";
+        HudStatusMessageText.Text = LocalizationManager.Translate(_statusService.Message);
+        HudStatusMetaText.Text = LocalizationManager.Translate($"{_statusService.UpdatedAt.LocalDateTime:HH:mm:ss} · 最近状态");
 
         var (background, border, indicator) = _statusService.Level switch
         {
@@ -76,7 +90,15 @@ public partial class RecordingHudWindow : Window
 
     private void BackToSettings_Click(object sender, MouseButtonEventArgs e)
     {
-        ((App)Application.Current).WindowFlow.ExitToSettings();
+        _ = ((App)Application.Current).WindowFlow.ExitToSettingsAsync();
+    }
+
+    private void RunOnUiThread(Action action)
+    {
+        if (Dispatcher.CheckAccess())
+            action();
+        else if (!Dispatcher.HasShutdownStarted && !Dispatcher.HasShutdownFinished)
+            Dispatcher.BeginInvoke(action);
     }
 
     private void StartRecording_Click(object sender, MouseButtonEventArgs e)

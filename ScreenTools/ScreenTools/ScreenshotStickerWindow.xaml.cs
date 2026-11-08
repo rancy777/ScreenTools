@@ -7,6 +7,9 @@ using Microsoft.Win32;
 
 namespace ScreenTools;
 
+/// <summary>
+/// Displays a saved screenshot as a movable on-screen image.
+/// </summary>
 public partial class ScreenshotStickerWindow : Window
 {
     private const double MinZoom = 0.2;
@@ -16,9 +19,13 @@ public partial class ScreenshotStickerWindow : Window
     private int _opacityIndex;
     private string _imagePath;
 
+    /// <summary>
+    /// Initializes a movable screenshot sticker for the saved image and screen position.
+    /// </summary>
     public ScreenshotStickerWindow(string imagePath, Point position)
     {
         InitializeComponent();
+        LocalizationManager.RegisterWindow(this);
         Left = position.X;
         Top = position.Y;
         _imagePath = imagePath;
@@ -27,13 +34,16 @@ public partial class ScreenshotStickerWindow : Window
         UpdateOpacityText();
     }
 
+    /// <summary>
+    /// Raised when the user requests that all screenshot stickers be closed.
+    /// </summary>
     public event EventHandler? CloseAllRequested;
 
     private void LoadImage(string imagePath)
     {
         if (!File.Exists(imagePath))
         {
-            MessageBox.Show("未找到截图文件，可能已被移动或删除。", "LensSnap", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(LocalizationManager.Translate("未找到截图文件，可能已被移动或删除。"), "LensSnap", MessageBoxButton.OK, MessageBoxImage.Warning);
             Close();
             return;
         }
@@ -50,7 +60,7 @@ public partial class ScreenshotStickerWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"图片加载失败：{ex.Message}", "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(LocalizationManager.Translate($"图片加载失败：{ex.Message}"), "LensSnap", MessageBoxButton.OK, MessageBoxImage.Error);
             Close();
         }
     }
@@ -105,7 +115,7 @@ public partial class ScreenshotStickerWindow : Window
         {
             FileName = Path.GetFileName(_imagePath),
             DefaultExt = extension,
-            Filter = "PNG 图像|*.png|JPEG 图像|*.jpg;*.jpeg|BMP 图像|*.bmp|所有文件|*.*"
+            Filter = $"{LocalizationManager.Translate("PNG 图像")}|*.png|{LocalizationManager.Translate("JPEG 图像")}|*.jpg;*.jpeg|{LocalizationManager.Translate("BMP 图像")}|*.bmp|{LocalizationManager.Translate("所有文件")}|*.*"
         };
 
         if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.FileName))
@@ -131,6 +141,6 @@ public partial class ScreenshotStickerWindow : Window
 
     private void UpdateOpacityText()
     {
-        OpacityText.Text = $"透明 {Math.Round(Opacity * 100):0}%";
+        OpacityText.Text = LocalizationManager.Translate($"透明 {Math.Round(Opacity * 100):0}%");
     }
 }
